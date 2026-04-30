@@ -13,17 +13,26 @@ import static org.lwjgl.vulkan.KHRSwapchain.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 import static org.lwjgl.vulkan.VK10.*;
 
 public class RenderPass {
+    public enum PassType {
+        PRIMARY,
+        SHADOW,
+        VOLUMETRICS,
+        AO
+    }
+
     Framebuffer framebuffer;
     long id;
+    final PassType passType;
 
     final int attachmentCount;
     AttachmentInfo colorAttachmentInfo;
     AttachmentInfo depthAttachmentInfo;
 
-    public RenderPass(Framebuffer framebuffer, AttachmentInfo colorAttachmentInfo, AttachmentInfo depthAttachmentInfo) {
+    public RenderPass(Framebuffer framebuffer, AttachmentInfo colorAttachmentInfo, AttachmentInfo depthAttachmentInfo, PassType passType) {
         this.framebuffer = framebuffer;
         this.colorAttachmentInfo = colorAttachmentInfo;
         this.depthAttachmentInfo = depthAttachmentInfo;
+        this.passType = passType;
 
         int count = 0;
         if (colorAttachmentInfo != null)
@@ -263,6 +272,10 @@ public class RenderPass {
         return framebuffer;
     }
 
+    public PassType getPassType() {
+        return passType;
+    }
+
     public void setFramebuffer(Framebuffer framebuffer) {
         this.framebuffer = framebuffer;
     }
@@ -334,6 +347,7 @@ public class RenderPass {
         Framebuffer framebuffer;
         AttachmentInfo colorAttachmentInfo;
         AttachmentInfo depthAttachmentInfo;
+        PassType passType = PassType.PRIMARY;
 
         public Builder(Framebuffer framebuffer) {
             this.framebuffer = framebuffer;
@@ -345,7 +359,12 @@ public class RenderPass {
         }
 
         public RenderPass build() {
-            return new RenderPass(framebuffer, colorAttachmentInfo, depthAttachmentInfo);
+            return new RenderPass(framebuffer, colorAttachmentInfo, depthAttachmentInfo, passType);
+        }
+
+        public Builder setPassType(PassType passType) {
+            this.passType = passType;
+            return this;
         }
 
         public Builder setLoadOp(int loadOp) {

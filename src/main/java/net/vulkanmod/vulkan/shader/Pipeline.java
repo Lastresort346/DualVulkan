@@ -38,6 +38,11 @@ import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.vulkan.VK10.*;
 
 public abstract class Pipeline {
+    public enum PassTarget {
+        PRIMARY,
+        SECONDARY_SHADOW,
+        SECONDARY_VOLUMETRICS
+    }
 
     private static final VkDevice DEVICE = Vulkan.getVkDevice();
     protected static final long PIPELINE_CACHE = createPipelineCache();
@@ -270,6 +275,7 @@ public abstract class Pipeline {
         SPIRV fragShaderSPIRV;
 
         RenderPass renderPass;
+        PassTarget passTarget = PassTarget.PRIMARY;
 
         Function<Uniform.Info, Supplier<MappedBuffer>> uniformSupplierGetter;
 
@@ -305,6 +311,10 @@ public abstract class Pipeline {
         public void setSPIRVs(SPIRV vertShaderSPIRV, SPIRV fragShaderSPIRV) {
             this.vertShaderSPIRV = vertShaderSPIRV;
             this.fragShaderSPIRV = fragShaderSPIRV;
+        }
+
+        public void setPassTarget(PassTarget passTarget) {
+            this.passTarget = passTarget;
         }
 
         public void compileShaders(String name, String vsh, String fsh) {

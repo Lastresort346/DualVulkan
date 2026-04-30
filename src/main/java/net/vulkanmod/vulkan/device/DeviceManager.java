@@ -11,7 +11,9 @@ import org.lwjgl.vulkan.*;
 
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static java.util.stream.Collectors.toSet;
 import static net.vulkanmod.vulkan.queue.Queue.findQueueFamilies;
@@ -25,6 +27,8 @@ import static org.lwjgl.vulkan.VK10.*;
 import static org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2;
 
 public abstract class DeviceManager {
+    private static final int AMD_VENDOR_ID = 0x1002;
+
     public static List<Device> availableDevices;
     public static List<Device> suitableDevices;
 
@@ -32,9 +36,11 @@ public abstract class DeviceManager {
     public static VkDevice vkDevice;
 
     public static Device device;
+    public static Device secondaryDevice;
 
     public static VkPhysicalDeviceProperties deviceProperties;
     public static VkPhysicalDeviceMemoryProperties memoryProperties;
+    public static VkPhysicalDevice secondaryPhysicalDevice;
 
     public static SurfaceProperties surfaceProperties;
 
@@ -107,6 +113,8 @@ public abstract class DeviceManager {
             }
 
             physicalDevice = DeviceManager.device.physicalDevice;
+            secondaryDevice = pickSecondaryDevice(DeviceManager.device);
+            secondaryPhysicalDevice = secondaryDevice != null ? secondaryDevice.physicalDevice : null;
 
             // Get device properties
             deviceProperties = device.properties;
@@ -116,6 +124,24 @@ public abstract class DeviceManager {
 
             surfaceProperties = querySurfaceProperties(physicalDevice, stack);
         }
+    }
+
+    private static Device pickSecondaryDevice(Device primaryDevice) {
+        if (availableDevices == null || availableDevices.size() < 2) {
+            return null;
+        }
+
+        for (Device candidate : availableDevices) {
+            if (candidate == primaryDevice) {
+                continue;
+            }
+
+            if (candidate.properties.vendorID() == AMD_VENDOR_ID) {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     static Device autoPickDevice() {
@@ -209,7 +235,8 @@ public abstract class DeviceManager {
 //                deviceVulkan13Features.pNext(deviceVulkan11Features.address());
             }
 
-            createInfo.ppEnabledExtensionNames(asPointerBuffer(Vulkan.REQUIRED_EXTENSION));
+            Set<String> enabledExtensions = new HashSet<>(Vulkan.REQUIRED_EXTENSION);
+            createInfo.ppEnabledExtensionNames(asPointerBuffer(enabledExtensions));
 
 //            Configuration.DEBUG_FUNCTIONS.set(true);
 
@@ -369,6 +396,10 @@ public abstract class DeviceManager {
 
     public static ComputeQueue getComputeQueue() {
         return computeQueue;
+    }
+
+    public static boolean hasSecondaryDevice() {
+        return secondaryDevice != null;
     }
 
     public static SurfaceProperties querySurfaceProperties(VkPhysicalDevice device, MemoryStack stack) {
