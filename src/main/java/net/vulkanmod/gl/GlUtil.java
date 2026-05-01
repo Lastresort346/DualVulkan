@@ -107,6 +107,10 @@ public abstract class GlUtil {
         };
     }
 
+    public static int vulkanFormat(com.mojang.blaze3d.platform.NativeImage.InternalGlFormat internalFormat) {
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    }
+
     public static int getGlFormat(int vFormat) {
         return switch (vFormat) {
             case VK_FORMAT_R8G8B8A8_UNORM -> GL11.GL_RGBA;

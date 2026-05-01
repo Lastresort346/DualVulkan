@@ -6,8 +6,7 @@ import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.chunk.build.UploadBuffer;
 import net.vulkanmod.render.chunk.build.thread.BuilderResources;
 import net.vulkanmod.render.chunk.build.thread.ThreadBuilderPack;
-import net.vulkanmod.render.vertex.QuadSorter;
-import net.vulkanmod.render.vertex.TerrainBuilder;
+import net.vulkanmod.render.vertex.TerrainBufferBuilder;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 
 public class SortTransparencyTask extends ChunkTask {
@@ -33,26 +32,24 @@ public class SortTransparencyTask extends ChunkTask {
         float z = (float) vec3.z;
 
         CompiledSection compiledSection = this.section.getCompiledSection();
-        QuadSorter.SortState transparencyState = compiledSection.transparencyState;
+        TerrainBufferBuilder.SortState transparencyState = compiledSection.transparencyState;
 
-        TerrainBuilder bufferBuilder = builderPack.builder(TerrainRenderType.TRANSLUCENT);
+        TerrainBufferBuilder bufferBuilder = builderPack.builder(TerrainRenderType.TRANSLUCENT);
         bufferBuilder.begin();
         bufferBuilder.restoreSortState(transparencyState);
 
-        bufferBuilder.setupQuadSorting(x - (float) this.section.xOffset(), y - (float) this.section.yOffset(), z - (float) this.section.zOffset());
-        TerrainBuilder.DrawState drawState = bufferBuilder.endDrawing();
+        bufferBuilder.setQuadSortOrigin(x - (float) this.section.xOffset(), y - (float) this.section.yOffset(), z - (float) this.section.zOffset());
+        compiledSection.transparencyState = bufferBuilder.getSortState();
+        TerrainBufferBuilder.RenderedBuffer renderedBuffer = bufferBuilder.end();
 
         CompileResult compileResult = new CompileResult(this.section, false);
-        UploadBuffer uploadBuffer = new UploadBuffer(bufferBuilder, drawState);
+        UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
         compileResult.renderedLayers.put(TerrainRenderType.TRANSLUCENT, uploadBuffer);
-
-        bufferBuilder.reset();
+        renderedBuffer.release();
 
         if (this.cancelled.get()) {
-            compileResult.renderedLayers.values().forEach(UploadBuffer::release);
             return Result.CANCELLED;
         }
-
         taskDispatcher.scheduleSectionUpdate(compileResult);
         return Result.SUCCESSFUL;
     }

@@ -37,12 +37,12 @@ public class TerrainBuilder {
         this.indexBufferCapacity = size;
         this.indexBufferPtr = ALLOCATOR.malloc(this.indexBufferCapacity);
 
-        this.format = PipelineManager.terrainVertexFormat;
+        this.format = PipelineManager.TERRAIN_VERTEX_FORMAT;
         this.vertexBuilder = vertexBuilder;
 
         var bufferBuilders = new TerrainBufferBuilder[QuadFacing.COUNT];
         for (int i = 0; i < QuadFacing.COUNT; i++) {
-            bufferBuilders[i] = new TerrainBufferBuilder(size, this.format.getVertexSize(), this.vertexBuilder);
+            bufferBuilders[i] = new TerrainBufferBuilder(size);
         }
 
         this.bufferBuilders = bufferBuilders;
@@ -100,7 +100,7 @@ public class TerrainBuilder {
     public void setupQuadSortingPoints() {
         TerrainBufferBuilder bufferBuilder = bufferBuilders[QuadFacing.UNDEFINED.ordinal()];
         long bufferPtr = bufferBuilder.getPtr();
-        int vertexCount = bufferBuilder.getVertices();
+        int vertexCount = bufferBuilder.getSortState().vertices;
 
         this.quadSorter.setupQuadSortingPoints(bufferPtr, vertexCount, this.format);
     }
@@ -164,7 +164,7 @@ public class TerrainBuilder {
         ALLOCATOR.free(this.indexBufferPtr);
 
         for (TerrainBufferBuilder bufferBuilder : this.bufferBuilders) {
-            bufferBuilder.free();
+            bufferBuilder.clear();
         }
     }
 

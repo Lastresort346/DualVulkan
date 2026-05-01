@@ -1,29 +1,26 @@
 package net.vulkanmod.render.engine;
 
-import com.mojang.blaze3d.textures.GpuTextureView;
-
-public class VkTextureView extends GpuTextureView {
+/**
+ * 1.21.1 stub: com.mojang.blaze3d.textures.GpuTextureView doesn't exist in 1.21.1.
+ * Wrap VkGpuTexture for mip/layer range views.
+ */
+public class VkTextureView implements AutoCloseable {
     private boolean closed;
+    private final VkGpuTexture texture;
+    private final int baseMip;
+    private final int mipLevels;
 
-    protected VkTextureView(VkGpuTexture gpuTexture, int i, int j) {
-        super(gpuTexture, i, j);
-        gpuTexture.addViews();
+    public VkTextureView(VkGpuTexture gpuTexture, int baseMip, int mipLevels) {
+        this.texture = gpuTexture;
+        this.baseMip = baseMip;
+        this.mipLevels = mipLevels;
     }
+
+    public VkGpuTexture texture() { return texture; }
+    public int baseMip() { return baseMip; }
+    public int mipLevels() { return mipLevels; }
+    public boolean isClosed() { return closed; }
 
     @Override
-    public boolean isClosed() {
-        return this.closed;
-    }
-
-    @Override
-    public void close() {
-        if (!this.closed) {
-            this.closed = true;
-            this.texture().removeViews();
-        }
-    }
-
-    public VkGpuTexture texture() {
-        return (VkGpuTexture) super.texture();
-    }
+    public void close() { closed = true; }
 }

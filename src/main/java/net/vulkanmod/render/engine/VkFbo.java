@@ -1,7 +1,7 @@
 package net.vulkanmod.render.engine;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
-import net.minecraft.util.ARGB;
+import com.mojang.blaze3d.platform.GlStateManager;
+import net.minecraft.util.FastColor;
 import net.vulkanmod.gl.VkGlFramebuffer;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
@@ -40,7 +40,11 @@ public class VkFbo {
             clear |= 0x4000;
             clearColor = colorAttachment.clearColor;
 
-            VRenderSystem.setClearColor(ARGB.redFloat(clearColor), ARGB.greenFloat(clearColor), ARGB.blueFloat(clearColor), ARGB.alphaFloat(clearColor));
+            float a = FastColor.ARGB32.alpha(clearColor) / 255.0f;
+            float r = FastColor.ARGB32.red(clearColor) / 255.0f;
+            float g = FastColor.ARGB32.green(clearColor) / 255.0f;
+            float b = FastColor.ARGB32.blue(clearColor) / 255.0f;
+            VRenderSystem.setClearColor(r, g, b, a);
 
             colorAttachment.needsClear = false;
         }

@@ -10,8 +10,6 @@ import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
-import net.vulkanmod.interfaces.biome.BiomeManagerExtended;
-import net.vulkanmod.render.chunk.build.biome.BiomeData;
 
 public class RenderRegionBuilder {
     private static final DataLayer DEFAULT_SKY_LIGHT_DATA_LAYER = new DataLayer(15);
@@ -28,7 +26,7 @@ public class RenderRegionBuilder {
         if (section == null || section.hasOnlyAir())
             return null;
 
-        var blockEntityMap = levelChunk.getBlockEntities();
+        var entityMap = levelChunk.getBlockEntities();
 
         int minSecX = secX - 1;
         int minSecZ = secZ - 1;
@@ -41,10 +39,7 @@ public class RenderRegionBuilder {
 
         DataLayer[][] lightData = new DataLayer[RenderRegion.SIZE][2 /* Light types */];
 
-        long biomeZoomSeed = BiomeManagerExtended.of(level.getBiomeManager()).getBiomeZoomSeed();
-        BiomeData biomeData = new BiomeData(biomeZoomSeed, minSecX, minSecY, minSecZ);
-
-        final int minHeightSec = level.getMinY() >> 4;
+        final int minHeightSec = level.getMinBuildHeight() >> 4;
         for (int x = minSecX; x <= maxSecX; ++x) {
             for (int z = minSecZ; z <= maxSecZ; ++z) {
                 LevelChunk levelChunk1 = getLevelChunk(level, x, z);
@@ -65,13 +60,11 @@ public class RenderRegionBuilder {
                     DataLayer[] dataLayers = getSectionDataLayers(level, pos);
 
                     lightData[idx] = dataLayers;
-
-                    biomeData.getBiomeData(level, section, relX, relY, relZ);
                 }
             }
         }
 
-        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, biomeData, blockEntityMap);
+        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, entityMap);
     }
 
     private DataLayer[] getSectionDataLayers(Level level, SectionPos pos) {

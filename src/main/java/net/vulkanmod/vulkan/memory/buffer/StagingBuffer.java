@@ -44,7 +44,7 @@ public class StagingBuffer extends Buffer {
     }
 
     public void align(int alignment) {
-        long alignedOffset = Util.align(usedBytes, alignment);
+        long alignedOffset = Util.align((int) usedBytes, alignment);
 
         if (alignedOffset > this.bufferSize) {
             submitUploads();

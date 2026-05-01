@@ -104,6 +104,12 @@ public abstract class Option<T> {
 
     protected abstract OptionWidget<?> createWidget();
 
+    public OptionWidget<?> createOptionWidget(int x, int y, int width, int height) {
+        OptionWidget<?> w = createWidget();
+        w.setPosition(x, y, width, height);
+        return w;
+    }
+
     public OptionWidget<?> getWidget() {
         if (this.widget == null) {
             this.widget = this.createWidget();

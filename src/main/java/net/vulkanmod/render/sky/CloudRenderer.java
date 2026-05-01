@@ -1,6 +1,6 @@
 package net.vulkanmod.render.sky;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
@@ -62,15 +62,10 @@ public class CloudRenderer {
     }
 
     public void renderClouds(ClientLevel level, float ticks, float partialTicks, double camX, double camY, double camZ) {
-        Optional<Integer> optional = level.dimensionType().cloudHeight();
-
-        if (optional.isEmpty()) {
-            return;
-        }
+        float cloudHeight = 128.0F; // Fallback for 1.21.1
 
         Minecraft minecraft = Minecraft.getInstance();
 
-        int cloudHeight = optional.get();
         double timeOffset = (ticks + partialTicks) * 0.03F;
         double centerX = (camX + timeOffset);
         double centerZ = camZ + 0.33F * CELL_WIDTH;
@@ -138,7 +133,7 @@ public class CloudRenderer {
         VRenderSystem.setModelOffset(-xTranslation, 0, -zTranslation);
 
         // TODO
-        Vec3 cloudColor = Vec3.fromRGB24(level.getCloudColor(partialTicks));
+        Vec3 cloudColor = level.getCloudColor(partialTicks);
         VRenderSystem.setShaderColor((float) cloudColor.x, (float) cloudColor.y, (float) cloudColor.z, 0.8f);
 
         GraphicsPipeline pipeline = PipelineManager.getCloudsPipeline();
@@ -196,7 +191,7 @@ public class CloudRenderer {
 
         BufferBuilder bufferBuilder = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
-        int cloudRange = Math.min(Minecraft.getInstance().options.cloudRange().get(), 128) * 16;
+        int cloudRange = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance(), 32) * 16;
         int renderDistance = Mth.ceil(cloudRange / 12.0F);
         boolean insideClouds = this.prevCloudY == Y_INSIDE_CLOUDS;
 
@@ -305,7 +300,12 @@ public class CloudRenderer {
                 int height = image.getHeight();
                 Validate.isTrue(width == height, "Image width and height must be the same");
 
-                int[] pixels = image.getPixelsABGR();
+                int[] pixels = new int[width * height];
+                for(int y = 0; y < height; ++y) {
+                    for(int x = 0; x < width; ++x) {
+                        pixels[y * width + x] = image.getPixelRGBA(x, y);
+                    }
+                }
 
                 return new CloudGrid(pixels, width);
             }

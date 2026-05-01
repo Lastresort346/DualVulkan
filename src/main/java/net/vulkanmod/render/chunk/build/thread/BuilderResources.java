@@ -2,10 +2,10 @@ package net.vulkanmod.render.chunk.build.thread;
 
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.RenderSection;
-import net.vulkanmod.render.chunk.build.renderer.BlockRenderer;
-import net.vulkanmod.render.chunk.build.renderer.FluidRenderer;
+import net.vulkanmod.render.chunk.build.BlockRenderer;
+import net.vulkanmod.render.chunk.build.LiquidRenderer;
 import net.vulkanmod.render.chunk.build.RenderRegion;
-import net.vulkanmod.render.chunk.build.color.TintCache;
+import net.vulkanmod.render.chunk.build.TintCache;
 import net.vulkanmod.render.chunk.build.light.LightMode;
 import net.vulkanmod.render.chunk.build.light.LightPipeline;
 import net.vulkanmod.render.chunk.build.light.data.ArrayLightDataCache;
@@ -16,54 +16,46 @@ import net.vulkanmod.render.chunk.build.light.smooth.SmoothLightPipeline;
 
 public class BuilderResources {
     public final ThreadBuilderPack builderPack = new ThreadBuilderPack();
+    public final BlockRenderer blockRenderer = new BlockRenderer();
+    public final LiquidRenderer liquidRenderer = new LiquidRenderer();
+
     public final TintCache tintCache = new TintCache();
 
-    public final BlockRenderer blockRenderer;
-    public final FluidRenderer fluidRenderer;
+    public RenderRegion region;
 
     public final ArrayLightDataCache lightDataCache = new ArrayLightDataCache();
     public final QuadLightData quadLightData = new QuadLightData();
 
-    private RenderRegion region;
+    public final LightPipeline smoothLightPipeline;
+    public final LightPipeline flatLightPipeline;
 
     private int totalBuildTime = 0, buildCount = 0;
 
     public BuilderResources() {
-        LightPipeline flatLightPipeline = new FlatLightPipeline(this.lightDataCache);
+        this.flatLightPipeline = new FlatLightPipeline(lightDataCache);
 
-        LightPipeline smoothLightPipeline;
-        if (Initializer.CONFIG.ambientOcclusion == LightMode.SUB_BLOCK) {
-            smoothLightPipeline = new NewSmoothLightPipeline(lightDataCache);
-        }
-        else {
-            smoothLightPipeline = new SmoothLightPipeline(lightDataCache);
-        }
-
-        this.blockRenderer = new BlockRenderer(flatLightPipeline, smoothLightPipeline);
-        this.fluidRenderer = new FluidRenderer(flatLightPipeline, smoothLightPipeline);
-
-        this.blockRenderer.setResources(this);
-        this.fluidRenderer.setResources(this);
+        if(Initializer.CONFIG.ambientOcclusion == LightMode.SUB_BLOCK)
+            this.smoothLightPipeline = new NewSmoothLightPipeline(lightDataCache);
+        else
+            this.smoothLightPipeline = new SmoothLightPipeline(lightDataCache);
     }
 
     public void update(RenderRegion region, RenderSection renderSection) {
         this.region = region;
-        this.blockRenderer.prepareForWorld(region, true);
 
-        this.lightDataCache.reset(region, renderSection.xOffset(), renderSection.yOffset(), renderSection.zOffset());
+        lightDataCache.reset(region, renderSection.xOffset(), renderSection.yOffset(), renderSection.zOffset());
+
+        blockRenderer.setResources(this);
+        liquidRenderer.setResources(this);
     }
 
-    public void free() {
-        builderPack.freeAll();
+    public void clear() {
+        builderPack.clearAll();
     }
 
     public void updateBuildStats(int buildTime) {
         this.buildCount++;
         this.totalBuildTime += buildTime;
-    }
-
-    public RenderRegion getRegion() {
-        return region;
     }
 
     public int getTotalBuildTime() {

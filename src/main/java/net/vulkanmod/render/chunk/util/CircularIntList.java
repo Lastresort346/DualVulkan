@@ -1,67 +1,78 @@
 package net.vulkanmod.render.chunk.util;
 
 import org.apache.commons.lang3.Validate;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Spliterator;
+import java.util.function.Consumer;
 
 public class CircularIntList {
-    private final int size;
-    private final int[] list;
-    private int startIndex;
+    private int[] list;
+    private final int startIndex;
 
-    private final OwnIterator iterator;
-    private final RangeIterator rangeIterator;
+    private int[] previous;
+    private int[] next;
 
-    public CircularIntList(int size) {
-        this.size = size;
-        this.list = new int[size + 2];
+    private OwnIterator iterator;
 
-        this.iterator = new OwnIterator();
-        this.rangeIterator = new RangeIterator();
-    }
-
-    public void updateStartIdx(int startIndex) {
-        int[] list = this.list;
+    public CircularIntList(int size, int startIndex) {
         this.startIndex = startIndex;
 
-        list[0] = -1;
-        list[size + 1] = -1;
+        this.generateList(size);
+    }
 
-        int k = 1;
+    private void generateList(int size) {
+        int[] list = new int[size];
+
+        this.previous = new int[size];
+        this.next = new int[size];
+
+        int k = 0;
         for(int i = startIndex; i < size; ++i) {
             list[k] = i;
+
             ++k;
         }
         for(int i = 0; i < startIndex; ++i) {
             list[k] = i;
             ++k;
         }
+
+        this.previous[0] = -1;
+        System.arraycopy(list, 0, this.previous, 1, size - 1);
+
+        this.next[size - 1] = -1;
+        System.arraycopy(list, 1, this.next, 0, size - 1);
+
+        this.list = list;
     }
 
     public int getNext(int i) {
-        return this.list[i + 1];
+        return this.next[i];
     }
 
     public int getPrevious(int i) {
-        return this.list[i - 1];
+        return this.previous[i];
     }
 
     public OwnIterator iterator() {
-        return this.iterator;
+        return new OwnIterator();
     }
 
-    public RangeIterator getRangeIterator(int startIndex, int endIndex) {
-        this.rangeIterator.update(startIndex, endIndex);
-        return this.rangeIterator;
+    public RangeIterator rangeIterator(int startIndex, int endIndex) {
+        return new RangeIterator(startIndex, endIndex);
     }
 
-    public RangeIterator createRangeIterator() {
-        return new RangeIterator();
+    public void restartIterator() {
+        this.iterator.restart();
     }
 
     public class OwnIterator implements Iterator<Integer> {
-        private int currentIndex = 0;
-        private final int maxIndex = size;
+        private int currentIndex = -1;
+        private final int maxIndex = list.length - 1;
 
         @Override
         public boolean hasNext() {
@@ -79,32 +90,38 @@ public class CircularIntList {
         }
 
         public void restart() {
-            this.currentIndex = 0;
+            this.currentIndex = -1;
         }
     }
 
     public class RangeIterator implements Iterator<Integer> {
         private int currentIndex;
-        private int startIndex;
-        private int endIndex;
+        private final int startIndex;
+        private final int maxIndex;
 
-        public void update(int startIndex, int endIndex) {
-            Validate.isTrue(endIndex < list.length, "Beyond max size");
-            this.startIndex = startIndex + 1;
-            this.endIndex = endIndex + 1;
+        public RangeIterator(int startIndex, int endIndex) {
+            this.startIndex = startIndex;
+            this.maxIndex = endIndex;
+            Validate.isTrue(this.maxIndex < list.length, "Beyond max size");
 
             this.restart();
         }
 
         @Override
         public boolean hasNext() {
-            return currentIndex < endIndex;
+            return currentIndex < maxIndex;
         }
 
         @Override
         public Integer next() {
             currentIndex++;
-            return list[currentIndex];
+            try {
+                return list[currentIndex];
+            } catch (Exception e) {
+                e.printStackTrace();
+                throw new RuntimeException();
+            }
+
         }
 
         public int getCurrentIndex() {

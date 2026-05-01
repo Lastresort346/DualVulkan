@@ -1,13 +1,10 @@
 package net.vulkanmod.config.gui;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.events.GuiEventListener;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.util.Mth;
-import net.vulkanmod.config.gui.render.GuiRenderer;
 import net.vulkanmod.config.gui.widget.OptionWidget;
 import net.vulkanmod.config.gui.widget.VAbstractWidget;
 import net.vulkanmod.config.option.Option;
@@ -33,15 +30,14 @@ public class VOptionList extends GuiElement {
         this.width = width;
         this.height = height;
 
-        this.itemWidth = this.width - 7;
+        this.itemWidth = (int) (0.95f * this.width);
         this.itemHeight = itemHeight;
         this.itemMargin = 3;
         this.totalItemHeight = this.itemHeight + this.itemMargin;
     }
 
-    @SuppressWarnings("unused")
     public void addButton(OptionWidget<?> widget) {
-        this.addEntry(new Entry(widget, this.itemMargin, null));
+        this.addEntry(new Entry(widget, this.itemMargin));
     }
 
     public void addAll(OptionBlock[] blocks) {
@@ -50,30 +46,35 @@ public class VOptionList extends GuiElement {
             int width = this.itemWidth;
             int height = this.itemHeight;
 
-            // add a header (this is MOSTLY for the search)
-            String title = block.title();
-            if (title != null && !title.isEmpty()) {
-                this.addEntry(new Entry(null, 8, title));
-            }
-
             var options = block.options();
             for (Option<?> option : options) {
+
                 int margin = this.itemMargin;
-                OptionWidget<?> widget = option.getWidget();
-                widget.setDimensions(x0, 0, width, height);
-                this.addEntry(new Entry(widget, margin, null));
+
+                this.addEntry(new Entry(option.createOptionWidget(x0, 0, width, height), margin));
             }
 
-            this.addEntry(new Entry(null, 12, null));
+            this.addEntry(new Entry(null, 12));
+        }
+    }
+
+    public void addAll(Option<?>[] options) {
+        for (Option<?> option : options) {
+            int x0 = this.x;
+            int width = this.itemWidth;
+            int height = this.itemHeight;
+
+            this.addEntry(new Entry(option.createOptionWidget(x0, 0, width, height), this.itemMargin));
+//            this.addEntry(new Entry(options[i].createOptionWidget(width / 2 - 155, 0, 200, 20)));
         }
     }
 
     private void addEntry(Entry entry) {
         this.children.add(entry);
+
         this.listLength += entry.getTotalHeight();
     }
 
-    @SuppressWarnings("unused")
     public void clearEntries() {
         this.listLength = 0;
         this.children.clear();
@@ -103,29 +104,27 @@ public class VOptionList extends GuiElement {
         this.focused = focussed;
     }
 
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
-        this.updateScrollingState(event.x(), event.button());
-        if (this.isMouseOver(event.x(), event.y())) {
-            Entry entry = this.getEntryAtPos(event.x(), event.y());
-            if (entry != null && entry.mouseClicked(event, bl)) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        this.updateScrollingState(mouseX, button);
+        if (this.isMouseOver(mouseX, mouseY)) {
+            Entry entry = this.getEntryAtPos(mouseX, mouseY);
+            if (entry != null && entry.mouseClicked(mouseX, mouseY, button)) {
                 setFocused(entry);
                 entry.setFocused(true);
                 return true;
             }
 
-            return event.button() == 0;
+            return button == 0;
         }
 
         return false;
     }
 
-    @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        if (this.isValidClickButton(event.button())) {
-            Entry entry = this.getEntryAtPos(event.x(), event.y());
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (this.isValidClickButton(button)) {
+            Entry entry = this.getEntryAtPos(mouseX, mouseY);
             if (entry != null) {
-                if (entry.mouseReleased(event)) {
+                if (entry.mouseReleased(mouseX, mouseY, button)) {
                     entry.setFocused(false);
                     setFocused(null);
                     return true;
@@ -135,14 +134,13 @@ public class VOptionList extends GuiElement {
         return false;
     }
 
-    @Override
-    public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
-        if (event.button() != 0) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (button != 0) {
             return false;
         }
 
         if (this.getFocused() != null) {
-            return this.getFocused().mouseDragged(event, deltaX, deltaY);
+            return this.getFocused().mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
         }
 
         if (!this.scrolling) {
@@ -150,9 +148,9 @@ public class VOptionList extends GuiElement {
         }
 
         double maxScroll = this.getMaxScroll();
-        if (event.y() < this.y) {
+        if (mouseY < this.y) {
             this.setScrollAmount(0.0);
-        } else if (event.y() > this.getBottom()) {
+        } else if (mouseY > this.getBottom()) {
             this.setScrollAmount(maxScroll);
         } else if (maxScroll > 0.0) {
             double barHeight = (double) this.height * this.height / this.getTotalLength();
@@ -205,7 +203,8 @@ public class VOptionList extends GuiElement {
     }
 
     public void renderWidget(int mouseX, int mouseY) {
-        GuiRenderer.enableScissor(x, y, x + width, y + height);
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+        GuiRenderer.enableScissor(x, y, width, height);
 
         this.renderList(mouseX, mouseY);
         GuiRenderer.disableScissor();
@@ -213,7 +212,8 @@ public class VOptionList extends GuiElement {
         // Scroll bar
         int maxScroll = this.getMaxScroll();
         if (maxScroll > 0) {
-            GlStateManager._enableBlend();
+            RenderSystem.enableBlend();
+            RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
             int height = this.getHeight();
             int totalLength = this.getTotalLength();
@@ -236,7 +236,7 @@ public class VOptionList extends GuiElement {
     }
 
     protected int getScrollbarPosition() {
-        return this.x + this.width;
+        return this.x + this.itemWidth + 5;
     }
 
     public VAbstractWidget getHoveredWidget(double mouseX, double mouseY) {
@@ -261,11 +261,13 @@ public class VOptionList extends GuiElement {
 
         int rowTop = this.y - (int) this.getScrollAmount();
         for (int j = 0; j < itemCount; ++j) {
-            VOptionList.Entry entry = this.getEntry(j);
+            int rowBottom = rowTop + this.itemHeight;
 
-            if (rowTop + entry.getTotalHeight() >= this.y && rowTop <= (this.y + this.height)) {
+            VOptionList.Entry entry = this.getEntry(j);
+            if (rowBottom >= this.y && rowTop <= (this.y + this.height)) {
                 boolean updateState = this.focused == null;
-                entry.render(rowTop, mouseX, mouseY, updateState, this.x);
+
+                entry.render(rowTop, mouseX, mouseY, updateState);
             }
 
             rowTop += entry.getTotalHeight();
@@ -283,28 +285,13 @@ public class VOptionList extends GuiElement {
     protected static class Entry implements GuiEventListener {
         final VAbstractWidget widget;
         final int margin;
-        final String headerTitle;
 
-        private Entry(OptionWidget<?> widget, int margin, String headerTitle) {
+        private Entry(OptionWidget<?> widget, int margin) {
             this.widget = widget;
             this.margin = margin;
-            this.headerTitle = headerTitle;
         }
 
-        public void render(int y, int mouseX, int mouseY, boolean updateState, int listX) {
-            // if there is a title, RENDER IT!!!
-            if (headerTitle != null && !headerTitle.isEmpty()) {
-                int headerY = y + 4;
-                GuiRenderer.drawString(
-                        Minecraft.getInstance().font,
-                        Component.literal(headerTitle),
-                        listX + 8,
-                        headerY,
-                        0xFFFFFFFF
-                );
-                return;
-            }
-
+        public void render(int y, int mouseX, int mouseY, boolean updateState) {
             if (widget == null)
                 return;
 
@@ -317,31 +304,22 @@ public class VOptionList extends GuiElement {
         }
 
         public int getTotalHeight() {
-            if (headerTitle != null && !headerTitle.isEmpty()) {
-                return Minecraft.getInstance().font.lineHeight + margin;
-            }
             if (widget != null)
                 return widget.height + margin;
             else
                 return margin;
         }
 
-        @Override
-        public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
-            if (widget == null) return false;
-            return widget.mouseClicked(event, bl);
+        public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return widget.mouseClicked(mouseX, mouseY, button);
         }
 
-        @Override
-        public boolean mouseReleased(MouseButtonEvent event) {
-            if (widget == null) return false;
-            return widget.mouseReleased(event);
+        public boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return widget.mouseReleased(mouseX, mouseY, button);
         }
 
-        @Override
-        public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
-            if (widget == null) return false;
-            return widget.mouseDragged(event, deltaX, deltaY);
+        public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+            return widget.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
         }
 
         @Override
@@ -351,8 +329,7 @@ public class VOptionList extends GuiElement {
 
         @Override
         public void setFocused(boolean bl) {
-            if (widget != null)
-                widget.setFocused(bl);
+            widget.setFocused(bl);
         }
     }
 }

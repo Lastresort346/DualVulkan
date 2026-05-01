@@ -2,17 +2,9 @@ package net.vulkanmod.render.model.quad;
 
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
-import net.vulkanmod.render.chunk.cull.QuadFacing;
 
-/**
- * Only used by FluidRenderer
- */
-public class ModelQuad implements ModelQuadView {
+public class ModelQuad implements QuadView {
     public static final int VERTEX_SIZE = 8;
-
-    public static int vertexOffset(int vertexIndex) {
-        return vertexIndex * VERTEX_SIZE;
-    }
 
     private final int[] data = new int[4 * VERTEX_SIZE];
 
@@ -66,21 +58,6 @@ public class ModelQuad implements ModelQuadView {
         return this.direction;
     }
 
-    @Override
-    public Direction lightFace() {
-        return this.direction;
-    }
-
-    @Override
-    public QuadFacing getQuadFacing() {
-        return QuadFacing.UNDEFINED;
-    }
-
-    @Override
-    public int getNormal() {
-        return 0;
-    }
-
     public float setX(int idx, float f) {
         return this.data[vertexOffset(idx)] = Float.floatToRawIntBits(f);
     }
@@ -110,5 +87,9 @@ public class ModelQuad implements ModelQuadView {
 
     public void setSprite(TextureAtlasSprite sprite) {
         this.sprite = sprite;
+    }
+
+    private static int vertexOffset(int vertexIndex) {
+        return vertexIndex * VERTEX_SIZE;
     }
 }

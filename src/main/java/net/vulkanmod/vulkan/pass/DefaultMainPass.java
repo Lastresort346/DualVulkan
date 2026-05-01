@@ -1,8 +1,7 @@
 package net.vulkanmod.vulkan.pass;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
-import com.mojang.blaze3d.textures.GpuTextureView;
+// RenderSystem.getDevice() not available in 1.21.1
+import net.vulkanmod.render.engine.VkTextureView;
 import net.vulkanmod.render.engine.VkGpuDevice;
 import net.vulkanmod.render.engine.VkGpuTexture;
 import net.vulkanmod.vulkan.Renderer;
@@ -31,10 +30,10 @@ public class DefaultMainPass implements MainPass {
     private RenderPass mainRenderPass;
     private RenderPass auxRenderPass;
 
-    private GpuTexture[] colorAttachmentTextures;
-    private GpuTextureView[] colorAttachmentTextureViews;
+    private VkGpuTexture[] colorAttachmentTextures;
+    private VkTextureView[] colorAttachmentTextureViews;
     IntSupplier imageIdxSupplier;
-    private GpuTexture depthAttachmentTexture;
+    private VkGpuTexture depthAttachmentTexture;
 
     DefaultMainPass() {
         createResources();
@@ -159,53 +158,66 @@ public class DefaultMainPass implements MainPass {
     }
 
     @Override
-    public GpuTexture getColorAttachment() {
+    public VkGpuTexture getColorAttachment() {
+        if (colorAttachmentTextures == null) return null;
         return this.colorAttachmentTextures[this.imageIdxSupplier.getAsInt()];
     }
 
     @Override
-    public GpuTextureView getColorAttachmentView() {
+    public VkTextureView getColorAttachmentView() {
+        if (colorAttachmentTextureViews == null) return null;
         return this.colorAttachmentTextureViews[this.imageIdxSupplier.getAsInt()];
     }
 
     @Override
-    public GpuTexture getDepthAttachment() {
-        return this.depthAttachmentTexture;
+    public VkGpuTexture getDepthAttachment() {
+        return depthAttachmentTexture;
+    }
+
+    @Override
+    public int getColorAttachmentGlId() {
+        return (int) this.mainFramebuffer.getColorAttachment().getId();
     }
 
     private void createAttachmentTextures() {
-        VkGpuDevice device = (VkGpuDevice) RenderSystem.getDevice();
-
         SwapChain swapChain = Renderer.getInstance().getSwapChain();
         if (this.mainFramebuffer == swapChain) {
             var swapChainImages = swapChain.getImages();
-
             int imageCount = swapChainImages.size();
-            this.colorAttachmentTextures = new GpuTexture[imageCount];
-            this.colorAttachmentTextureViews = new GpuTextureView[imageCount];
+            this.colorAttachmentTextures = new VkGpuTexture[imageCount];
+            this.colorAttachmentTextureViews = new VkTextureView[imageCount];
 
             for (int i = 0; i < imageCount; ++i) {
-                VkGpuTexture attachmentTexture = device.gpuTextureFromVulkanImage(swapChainImages.get(i));
-                GpuTextureView attachmentTextureView = device.createTextureView(attachmentTexture);
+                VkGpuTexture attachmentTexture = gpuTextureFromVulkanImage(swapChainImages.get(i));
+                VkTextureView attachmentTextureView = new VkTextureView(attachmentTexture, 0, 1);
                 this.colorAttachmentTextures[i] = attachmentTexture;
                 this.colorAttachmentTextureViews[i] = attachmentTextureView;
             }
-
             this.imageIdxSupplier = Renderer::getCurrentImage;
-        }
-        else {
-            this.colorAttachmentTextures = new GpuTexture[1];
-            this.colorAttachmentTextureViews = new GpuTextureView[1];
+        } else {
+            this.colorAttachmentTextures = new VkGpuTexture[1];
+            this.colorAttachmentTextureViews = new VkTextureView[1];
 
-            VkGpuTexture attachmentTexture = device.gpuTextureFromVulkanImage(this.mainFramebuffer.getColorAttachment());
-            GpuTextureView attachmentTextureView = device.createTextureView(attachmentTexture);
+            VkGpuTexture attachmentTexture = gpuTextureFromVulkanImage(this.mainFramebuffer.getColorAttachment());
+            VkTextureView attachmentTextureView = new VkTextureView(attachmentTexture, 0, 1);
             this.colorAttachmentTextures[0] = attachmentTexture;
             this.colorAttachmentTextureViews[0] = attachmentTextureView;
-
-            // Always return idx 0 as there's only 1 image
             this.imageIdxSupplier = () -> 0;
         }
 
-        this.depthAttachmentTexture = device.gpuTextureFromVulkanImage(this.mainFramebuffer.getDepthAttachment());
+        if (this.mainFramebuffer.getDepthAttachment() != null) {
+            this.depthAttachmentTexture = gpuTextureFromVulkanImage(this.mainFramebuffer.getDepthAttachment());
+        }
+    }
+
+    private static VkGpuTexture gpuTextureFromVulkanImage(VulkanImage vulkanImage) {
+        if (vulkanImage == null) return null;
+        // Wrap the VulkanImage in a VkGpuTexture with no GL texture backing
+        return new VkGpuTexture(-1, null, vulkanImage.mipLevels) {
+            @Override
+            public VulkanImage getVulkanImage() {
+                return vulkanImage;
+            }
+        };
     }
 }

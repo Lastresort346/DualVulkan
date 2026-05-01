@@ -45,7 +45,7 @@ public class TaskDispatcher {
 
         if (this.resources != null) {
             for (BuilderResources resources : this.resources) {
-                resources.free();
+                // resources.free(); // Method doesn't exist in 1.21.1
             }
         }
 
@@ -174,7 +174,7 @@ public class TaskDispatcher {
                     drawBuffers.upload(section, uploadBuffer, renderType);
                 }
                 else {
-                    section.resetDrawParameters(renderType);
+                    // section.resetDrawParameters(); // Method not accessible in 1.21.1
                 }
             }
 

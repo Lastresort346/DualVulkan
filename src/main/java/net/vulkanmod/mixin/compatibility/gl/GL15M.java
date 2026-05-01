@@ -1,6 +1,6 @@
 package net.vulkanmod.mixin.compatibility.gl;
 
-import net.vulkanmod.gl.VkGlBuffer;
+import net.vulkanmod.gl.GlBuffer;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.system.NativeType;
@@ -8,7 +8,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 
 @Mixin(GL15.class)
 public class GL15M {
@@ -19,7 +18,7 @@ public class GL15M {
     @Overwrite(remap = false)
     @NativeType("void")
     public static int glGenBuffers() {
-        return VkGlBuffer.glGenBuffers();
+        return GlBuffer.glGenBuffers();
     }
 
     /**
@@ -27,7 +26,7 @@ public class GL15M {
      */
     @Overwrite(remap = false)
     public static void glBindBuffer(@NativeType("GLenum") int target, @NativeType("GLuint") int buffer) {
-        VkGlBuffer.glBindBuffer(target, buffer);
+        GlBuffer.glBindBuffer(target, buffer);
     }
 
     /**
@@ -35,7 +34,7 @@ public class GL15M {
      */
     @Overwrite(remap = false)
     public static void glBufferData(@NativeType("GLenum") int target, @NativeType("void const *") ByteBuffer data, @NativeType("GLenum") int usage) {
-        VkGlBuffer.glBufferData(target, data, usage);
+        GlBuffer.glBufferData(target, data, usage);
     }
 
     /**
@@ -43,7 +42,7 @@ public class GL15M {
      */
     @Overwrite(remap = false)
     public static void glBufferData(int i, long l, int j) {
-        VkGlBuffer.glBufferData(i, l, j);
+        GlBuffer.glBufferData(i, l, j);
     }
 
     /**
@@ -52,7 +51,7 @@ public class GL15M {
     @Overwrite(remap = false)
     @NativeType("void *")
     public static ByteBuffer glMapBuffer(@NativeType("GLenum") int target, @NativeType("GLenum") int access) {
-        return VkGlBuffer.glMapBuffer(target, access);
+        return GlBuffer.glMapBuffer(target, access);
     }
 
     /**
@@ -62,7 +61,7 @@ public class GL15M {
     @Nullable
     @NativeType("void *")
     public static ByteBuffer glMapBuffer(@NativeType("GLenum") int target, @NativeType("GLenum") int access, long length, @Nullable ByteBuffer old_buffer) {
-        return VkGlBuffer.glMapBuffer(target, access);
+        return GlBuffer.glMapBuffer(target, access);
     }
 
     /**
@@ -71,7 +70,7 @@ public class GL15M {
     @Overwrite(remap = false)
     @NativeType("GLboolean")
     public static boolean glUnmapBuffer(@NativeType("GLenum") int target) {
-        return VkGlBuffer.glUnmapBuffer(target);
+        return GlBuffer.glUnmapBuffer(target);
     }
 
     /**
@@ -79,14 +78,6 @@ public class GL15M {
      */
     @Overwrite(remap = false)
     public static void glDeleteBuffers(int i) {
-        VkGlBuffer.glDeleteBuffers(i);
-    }
-
-    /**
-     * @author
-     */
-    @Overwrite(remap = false)
-    public static void glDeleteBuffers(@NativeType("GLuint const *") IntBuffer buffers) {
-        VkGlBuffer.glDeleteBuffers(buffers);
+        GlBuffer.glDeleteBuffers(i);
     }
 }

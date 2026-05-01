@@ -286,6 +286,10 @@ public class VulkanImage {
         this.sampler = sampler;
     }
 
+    public void updateTextureSampler(boolean blur, boolean clamp, boolean mipmap) {
+        this.sampler = SamplerManager.getSampler(clamp, blur, mipmap ? this.mipLevels - 1 : 0);
+    }
+
     public void transitionImageLayout(MemoryStack stack, VkCommandBuffer commandBuffer, int newLayout) {
         transitionImageLayout(stack, commandBuffer, this, newLayout);
     }

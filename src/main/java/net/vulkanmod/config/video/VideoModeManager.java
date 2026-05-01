@@ -52,7 +52,7 @@ public abstract class VideoModeManager {
     }
 
     public static VideoModeSet getFirstAvailable() {
-        var videoModeSets = monitorToVideoModeSets.get(glfwGetPrimaryMonitor());
+        VideoModeSet[] videoModeSets = monitorToVideoModeSets.get(glfwGetPrimaryMonitor());
 
         if (videoModeSets != null)
             return videoModeSets[videoModeSets.length - 1];
@@ -110,8 +110,19 @@ public abstract class VideoModeManager {
     }
 
     public static VideoModeSet getVideoModeSet(VideoModeSet.VideoMode videoMode) {
-        var videoModeSets = monitorToVideoModeSets.get(selectedMonitor);
-        for (var set : videoModeSets) {
+        VideoModeSet[] videoModeSets = monitorToVideoModeSets.get(selectedMonitor);
+        for (VideoModeSet set : videoModeSets) {
+            if (set.width == videoMode.width && set.height == videoMode.height)
+                return set;
+        }
+
+        return null;
+    }
+
+    public static VideoModeSet getFromVideoMode(VideoModeSet.VideoMode videoMode) {
+        VideoModeSet[] videoModeSets = monitorToVideoModeSets.get(selectedMonitor);
+        if (videoModeSets == null) return null;
+        for (VideoModeSet set : videoModeSets) {
             if (set.width == videoMode.width && set.height == videoMode.height)
                 return set;
         }
@@ -128,7 +139,7 @@ public abstract class VideoModeManager {
     }
 
     public static Monitor findBestMonitor(final Window window) {
-        long windowMonitor = GLFW.glfwGetWindowMonitor(window.handle());
+        long windowMonitor = GLFW.glfwGetWindowMonitor(window.getWindow());
         if (windowMonitor != 0L) {
             return monitors.get(windowMonitor);
         } else {

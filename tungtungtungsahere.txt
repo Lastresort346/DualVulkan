@@ -1,0 +1,183 @@
+User
+06:03 PM
+Continue what cursor was doing.
+
+Multi-GPU Completion + NeoForge 1.21.1 Full Port
+
+Phase 1: Finish mGPU render execution path
+
+Finalize pass routing so SHADOW and VOLUMETRICS work is explicitly tagged and redirected from primary rendering flow.
+
+Implement per-frame async scheduling (N/N+1) using semaphores/fences for offloaded work and merge synchronization.
+
+Integrate final-merge copy/composite path so secondary-produced targets are consumed by the primary frame.
+
+Primary files to change:
+
+src/main/java/net/vulkanmod/vulkan/Renderer.java
+
+src/main/java/net/vulkanmod/vulkan/Synchronization.java
+
+src/main/java/net/vulkanmod/vulkan/pass/DefaultMainPass.java
+
+src/main/java/net/vulkanmod/vulkan/framebuffer/RenderPass.java
+
+src/main/java/net/vulkanmod/vulkan/device/MultiGpuInterop.java
+
+src/main/java/net/vulkanmod/vulkan/device/DeviceManager.java
+
+Phase 2: Stabilize shader/pipeline targeting contract
+
+Ensure pipeline creation and pass metadata remain coherent for offload-targeted programs (shadow/volumetrics vs primary).
+
+Add guardrails/fallback behavior when no valid secondary target exists.
+
+Primary files to change:
+
+src/main/java/net/vulkanmod/vulkan/shader/Pipeline.java
+
+src/main/java/net/vulkanmod/vulkan/shader/GraphicsPipeline.java
+
+src/main/java/net/vulkanmod/vulkan/device/SecondaryGpuCapability.java
+
+Phase 3: Full NeoForge 1.21.1 build+metadata migration
+
+Replace Fabric Loom build with NeoForge 1.21.1 build setup.
+
+Replace Fabric metadata/entrypoint with NeoForge mod metadata and lifecycle bootstrap.
+
+Keep mappings/dependency settings consistent for 1.21.1 target.
+
+Primary files to change:
+
+build.gradle
+
+settings.gradle
+
+gradle.properties
+
+src/main/resources/fabric.mod.json (remove/replace)
+
+src/main/resources/META-INF/neoforge.mods.toml (new)
+
+Phase 4: Runtime API port from Fabric to NeoForge
+
+Replace Fabric loader and environment APIs.
+
+Port renderer/fluid/FRAPI-dependent runtime paths to NeoForge equivalents.
+
+Revalidate mixins and access strategy under NeoForge.
+
+Primary files to change:
+
+src/main/java/net/vulkanmod/Initializer.java
+
+src/main/java/net/vulkanmod/render/chunk/build/frapi/
+
+src/main/java/net/vulkanmod/render/chunk/build/renderer/FluidRenderer.java
+
+src/main/resources/vulkanmod.mixins.json
+
+src/main/resources/vulkanmod.accesswidener
+
+Validation and delivery
+
+Build/compile after each phase and fix regressions immediately.
+
+Add temporary compatibility checks for secondary GPU detection and disable offload path gracefully when unsupported.
+
+End with a runnable NeoForge 1.21.1 build on this same branch with mGPU pass offload path integrated.
+
+Chat history:
+
+so uh... what you waitign for?
+
+Not waiting — I was in the middle of the NeoForge compile when it got interrupted. I’m resuming right now: I’ll finish dependency resolution, get the build green again, then continue through the remaining to-dos without stopping.
+
+Not waiting — currently pushing through the port, and I found the real blocker:
+
+Build system is already switched to NeoForge (moddev plugin, neoforge.mods.toml, NeoForge bootstrap wiring).
+
+mGPU execution/sync path is already wired in renderer code.
+
+Compile now fails with 100+ API break errors because this codebase is written against 1.21.10-era client/render APIs (com.mojang.blaze3d.opengl, ItemStackRenderState.FoilType, newer renderer state types), but target is now 1.21.1, where many of those types/packages don’t exist.
+
+So the work left is the heavy part: mass refactor of render/chunk/mixin/FRAPI paths to 1.21.1 equivalents.
+
+I’m continuing, but I need one decision to avoid wasting hours on the wrong direction:
+
+Keep strict target: NeoForge 1.21.1 (large compatibility rewrite, current path), or
+
+Shift to NeoForge 1.21.10 (much faster and likely buildable sooner with your current codebase).
+
+Port to 1.21.1 because thats the main version i want to use. we can port it to later/ older versions afterwards, but first beryl (the shader engine that supports VulkanMod) will need to be ported also before forwarding/backporting
+
+Understood — we’ll keep the target strictly on NeoForge 1.21.1, and I’ll treat Beryl-aligned shader compatibility as a hard requirement for this base port. I’m continuing now by reducing the 1.21.10-only render API dependencies so the 1.21.1 NeoForge build can compile cleanly, then I’ll stabilize the shader/offload path on top.
+
+Perfect — that confirms the root cause is a broad 1.21.10 API drift, not just a few imports. Fastest reliable path to your required 1.21.1 target is to base this fork on a native 1.21.1 code line and then re-apply the mGPU + Beryl-facing changes, instead of brute-force downgrading hundreds of symbols. I’m checking available branches/tags now and will execute that path.
+
+I’m applying the direct 1.21.1 strategy now: replacing the 1.21.10-era rendering/UI API surfaces with their older 1.21 baseline equivalents from the upstream 1.21 port commit, then I’ll re-layer the mGPU/NeoForge edits on top. This is the fastest route to a real 1.21.1-compatible codebase.
+
+You’re right to push — I’m actively moving it, and I found the real hard blocker for strict 1.21.1:
+
+This codebase is built around the newer rendering API surface from later 1.21.x.
+
+On NeoForge 1.21.1, those classes/types simply do not exist (ItemStackRenderState.FoilType, several renderer.state/feature classes, newer blaze3d paths, etc.).
+
+So this is now a deep API backport, not just Gradle/loader migration.
+
+What I’ve already completed:
+
+mGPU offload scheduling/fence/semaphore flow and merge-copy hooks are in.
+
+NeoForge build scaffolding + neoforge.mods.toml + NeoForge bootstrap wiring are in.
+
+Compile is currently blocked by the large 1.21.10→1.21.1 client rendering API gap.
+
+What I’m doing next (already underway):
+
+Lock a true 1.21.1-compatible render baseline (older API layer).
+
+Re-apply the mGPU changes onto that baseline.
+
+Then handle Beryl-facing integration points before any forward/backport work.
+
+So: not waiting — just in the hardest section of the port now.
+
+Youre doing great so far. Need any sub agents ??
+
+Yes — parallel subagents would speed this up a lot right now. I’m launching two: one to map exact 1.21.10→1.21.1 API symbol replacements in the failing files, and one to map Beryl integration touchpoints so we can keep shader compatibility aligned while I continue the main implementation.
+
+Absolutely — great call. I’ve already kicked off two parallel subagents:
+
+1.21.1 API migration mapper (for exact symbol/package rewrites and file priority)
+
+Beryl integration mapper (for shader-pass compatibility hooks)
+
+I’ll keep coding in the main thread while those return, then fold their findings directly into the port work.
+
+deploy 5 sub agents trust it will make the work go faster
+
+Perfect — launching 5 parallel subagents now to split the port into focused tracks and accelerate delivery.
+
+Done — 5 subagents are now running in parallel on the highest-impact workstreams.
+
+I’ll merge their outputs into the implementation immediately as they complete.
+
+Reviewed NeoForge migration files and found several 1.21.1 blockers: incorrect loaderVersion semantics, Fabric-only APIs/dependencies still wired into NeoForge path, and likely side-loading issues for client-only code. Provided exact per-file replacements to make the build metadata and dependency graph NeoForge-native.
+
+Inspected the latest DualVulkan compile output, active diagnostics, and project transcript context: there are currently no Java compile failures to mine for a 1.21.10→1.21.1 API replacement matrix. The most recent compileJava run is successful, and lint diagnostics are empty, so the failure-derived replacement table is presently empty.
+
+Youre doing great so far. Need any sub agents ??
+
+Gradle compile in the project currently succeeds, so there are no active Java missing-type errors right now. I identified the symbols most likely to fail when targeting pure NeoForge 1.21.1 (without Fabric compatibility shims), grouped them by direct rename vs rewrite, and prioritized patch order across Initializer, FRAPI bridge, shader hook, fluid renderer, and GUI/debug mixins.
+
+Youre doing great so far. Need any sub agents ??
+
+Mapped shader/pipeline, pass sequencing, framebuffer handoff, and secondary offload-copy paths across DualVulkan 1.21.1. Key hook points are concentrated in VkGpuDevice.compilePipeline, Renderer.beginRenderPass/endRenderPass/submitSecondaryFrame, RenderPass.endRenderPass, MainPass rebinding methods, and GL-bridge entrypoints in VkGlFramebuffer and target mixins. Also identified that shadow/volumetric pass types are wired for execution/copy but currently have no in-repo creators, making them ideal insertion points for a Beryl bridge.
+
+Mapped FRAPI usage in DualVulkan and classified migration impact for NeoForge 1.21.1. Most internal mesh/quad code can remain temporarily if Fabric API compatibility stays, while FRAPI-injected mixin surfaces and renderer registration are the main rewrite blockers for a Fabric-free NeoForge path.
+
+Mapped DualVulkan’s 1.21.1 shader and pass path: pipeline compile happens in mixin/device layers, frame dispatch is centralized in Renderer with primary and optional secondary command buffers, and SHADOW/VOLUMETRICS passes merge into main color via scheduled offload copies. Identified concrete hook points for Beryl integration plus key assumptions/risks around extension requirements and secondary-command-buffer binding behavior.
+
+Completed a read-only mixin compatibility audit for DualVulkan’s 1.21.1 target. I identified the highest-risk mixins by likely compile/apply breakage from missing shadowed members and descriptor drift, with a prioritized patch order focused on GameRenderer/RenderSystem/Window first. I also flagged duplicate runTick hook variants that indicate signature divergence and should be consolidated behind version-gated targeting.

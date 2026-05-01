@@ -43,11 +43,12 @@ public class UploadManager {
     }
 
     public void recordUpload(Buffer buffer, long dstOffset, long bufferSize, ByteBuffer src) {
+        beginCommands();
+
+        VkCommandBuffer commandBuffer = this.commandBuffer.getHandle();
+
         StagingBuffer stagingBuffer = Vulkan.getStagingBuffer();
         stagingBuffer.copyBuffer((int) bufferSize, src);
-
-        beginCommands();
-        VkCommandBuffer commandBuffer = this.commandBuffer.getHandle();
 
         if (!this.dstBuffers.add(buffer.getId())) {
             try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -71,10 +72,10 @@ public class UploadManager {
     }
 
     public void copyBuffer(Buffer src, Buffer dst) {
-        copyBuffer(src, 0, dst, 0, src.getBufferSize());
+        copyBuffer(src, 0, dst, 0, (int) src.getBufferSize());
     }
 
-    public void copyBuffer(Buffer src, long srcOffset, Buffer dst, long dstOffset, long size) {
+    public void copyBuffer(Buffer src, int srcOffset, Buffer dst, int dstOffset, int size) {
         beginCommands();
 
         VkCommandBuffer commandBuffer = this.commandBuffer.getHandle();

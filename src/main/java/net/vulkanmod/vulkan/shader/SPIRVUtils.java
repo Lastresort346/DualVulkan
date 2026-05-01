@@ -72,6 +72,15 @@ public class SPIRVUtils {
             includePaths.add(url.toExternalForm());
     }
 
+    public static SPIRV compileShaderAbsoluteFile(String filename, ShaderKind shaderKind) {
+        try {
+            String source = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(filename)));
+            return compileShader(filename, source, shaderKind);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to read shader file: " + filename, e);
+        }
+    }
+
     public static SPIRV compileShader(String filename, String source, ShaderKind shaderKind) {
         if (source == null) {
             throw new NullPointerException("source for %s.%s is null".formatted(filename, shaderKind));

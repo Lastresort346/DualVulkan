@@ -7,14 +7,13 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.Mth;
-import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.interfaces.FrustumMixed;
 import net.vulkanmod.render.chunk.*;
 import net.vulkanmod.render.chunk.build.RenderRegionBuilder;
-import net.vulkanmod.render.chunk.build.task.TaskDispatcher;
+import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.chunk.frustum.VFrustum;
 import net.vulkanmod.render.chunk.util.AreaSetQueue;
 import net.vulkanmod.render.chunk.util.ResettableQueue;
@@ -56,14 +55,13 @@ public class SectionGraph {
 
     public void update(Camera camera, Frustum frustum, boolean spectator) {
         Profiler profiler = Profiler.getMainProfiler();
-        ProfilerFiller mcProfiler = net.minecraft.util.profiling.Profiler.get();
 
         BlockPos blockpos = camera.getBlockPosition();
 
-        mcProfiler.popPush("update");
+        this.minecraft.getProfiler().popPush("update");
 
         boolean flag = this.minecraft.smartCull;
-        if (spectator && this.level.getBlockState(blockpos).isSolidRender()) {
+        if (spectator && this.level.getBlockState(blockpos).isSolidRender(this.level, blockpos)) {
             flag = false;
         }
 
@@ -72,7 +70,7 @@ public class SectionGraph {
         this.sectionGrid.updateFrustumVisibility(this.frustum);
         profiler.pop();
 
-        mcProfiler.push("partial_update");
+        this.minecraft.getProfiler().push("partial_update");
 
         this.initUpdate();
         this.initializeQueueForFullUpdate(camera);
@@ -84,7 +82,7 @@ public class SectionGraph {
 
         this.scheduleRebuilds();
 
-        mcProfiler.pop();
+        this.minecraft.getProfiler().pop();
     }
 
     private void initializeQueueForFullUpdate(Camera camera) {
@@ -93,8 +91,8 @@ public class SectionGraph {
         RenderSection renderSection = this.sectionGrid.getSectionAtBlockPos(blockpos);
 
         if (renderSection == null) {
-            boolean flag = blockpos.getY() > this.level.getMinY();
-            int y = flag ? this.level.getMaxY() - 8 : this.level.getMinY() + 8;
+            boolean flag = blockpos.getY() > this.level.getMinBuildHeight();
+            int y = flag ? this.level.getMaxBuildHeight() - 8 : this.level.getMinBuildHeight() + 8;
             int x = Mth.floor(vec3.x / 16.0D) * 16;
             int z = Mth.floor(vec3.z / 16.0D) * 16;
 

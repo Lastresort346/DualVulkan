@@ -1,0 +1,14 @@
+{
+  "samplers": [
+    { "name": "Sampler0" }
+  ],
+  "images": [
+    { "name":  "Sampler3" }
+  ],
+  "UBOs": [
+
+  ],
+  "ManualUBOs" : [
+    { "type":  "compute", "binding": 0, "size": 2 }
+  ]
+}

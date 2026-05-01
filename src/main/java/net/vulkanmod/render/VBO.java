@@ -1,31 +1,34 @@
 package net.vulkanmod.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.ShaderInstance;
+import net.vulkanmod.interfaces.ShaderMixed;
 import net.vulkanmod.vulkan.Renderer;
-import net.vulkanmod.vulkan.memory.*;
-import net.vulkanmod.vulkan.memory.buffer.IndexBuffer;
-import net.vulkanmod.vulkan.memory.buffer.VertexBuffer;
+import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.memory.buffer.index.AutoIndexBuffer;
+import net.vulkanmod.vulkan.memory.buffer.IndexBuffer;
+import net.vulkanmod.vulkan.memory.MemoryTypes;
+import net.vulkanmod.vulkan.memory.buffer.VertexBuffer;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
-import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
+import org.joml.Matrix4f;
 
 import java.nio.ByteBuffer;
 
 public class VBO {
-    private final MemoryType memoryType;
     private VertexBuffer vertexBuffer;
     private IndexBuffer indexBuffer;
 
-    private VertexFormat.Mode mode;
-    private boolean autoIndexed = false;
     private int indexCount;
     private int vertexCount;
+    private VertexFormat.Mode mode;
 
-    public VBO(boolean useGpuMem) {
-       this.memoryType = useGpuMem ? MemoryTypes.GPU_MEM : MemoryTypes.HOST_MEM;
-    }
+    private boolean autoIndexed = false;
+
+    public VBO() {}
+    public VBO(boolean b) {}
 
     public void upload(MeshData meshData) {
         MeshData.DrawState parameters = meshData.drawState();
@@ -34,24 +37,23 @@ public class VBO {
         this.vertexCount = parameters.vertexCount();
         this.mode = parameters.mode();
 
-        this.uploadVertexBuffer(parameters, meshData.vertexBuffer());
-        this.uploadIndexBuffer(meshData.indexBuffer());
+        this.configureVertexBuffer(parameters, meshData.vertexBuffer());
+        this.configureIndexBuffer(parameters, meshData.indexBuffer());
 
         meshData.close();
     }
 
-    private void uploadVertexBuffer(MeshData.DrawState parameters, ByteBuffer data) {
+    private void configureVertexBuffer(MeshData.DrawState parameters, ByteBuffer data) {
         if (data != null) {
             if (this.vertexBuffer != null)
-                this.vertexBuffer.scheduleFree();
+                this.vertexBuffer.freeBuffer();
 
-            int size = parameters.format().getVertexSize() * parameters.vertexCount();
-            this.vertexBuffer = new VertexBuffer(size, this.memoryType);
-            this.vertexBuffer.copyBuffer(data, size);
+            this.vertexBuffer = new VertexBuffer(data.remaining(), MemoryTypes.GPU_MEM);
+            this.vertexBuffer.copyToVertexBuffer(parameters.format().getVertexSize(), parameters.vertexCount(), data);
         }
     }
 
-    public void uploadIndexBuffer(ByteBuffer data) {
+    private void configureIndexBuffer(MeshData.DrawState parameters, ByteBuffer data) {
         if (data == null) {
 
             AutoIndexBuffer autoIndexBuffer;
@@ -79,9 +81,8 @@ public class VBO {
                 default -> throw new IllegalStateException("Unexpected draw mode: %s".formatted(this.mode));
             }
 
-            if (this.indexBuffer != null && !this.autoIndexed) {
-                this.indexBuffer.scheduleFree();
-            }
+            if (this.indexBuffer != null && !this.autoIndexed)
+                this.indexBuffer.freeBuffer();
 
             if (autoIndexBuffer != null) {
                 autoIndexBuffer.checkCapacity(this.vertexCount);
@@ -89,14 +90,56 @@ public class VBO {
             }
 
             this.autoIndexed = true;
-        }
-        else {
-            if (this.indexBuffer != null && !this.autoIndexed) {
-                this.indexBuffer.scheduleFree();
-            }
+
+        } else {
+            if (this.indexBuffer != null)
+                this.indexBuffer.freeBuffer();
 
             this.indexBuffer = new IndexBuffer(data.remaining(), MemoryTypes.GPU_MEM);
             this.indexBuffer.copyBuffer(data, data.remaining());
+        }
+
+    }
+
+    public void drawWithShader(Matrix4f MV, Matrix4f P, ShaderInstance shader) {
+        if (this.indexCount != 0) {
+            RenderSystem.assertOnRenderThread();
+
+            RenderSystem.setShader(() -> shader);
+
+            drawWithShader(MV, P, ((ShaderMixed) shader).getPipeline());
+
+        }
+    }
+
+    public void drawWithShader(Matrix4f MV, Matrix4f P, GraphicsPipeline pipeline) {
+        if (this.indexCount != 0) {
+            RenderSystem.assertOnRenderThread();
+
+            VRenderSystem.applyMVP(MV, P);
+
+            VRenderSystem.setPrimitiveTopologyGL(this.mode.asGLMode);
+
+            Renderer renderer = Renderer.getInstance();
+            renderer.bindGraphicsPipeline(pipeline);
+            VTextureSelector.bindShaderTextures(pipeline);
+            renderer.uploadAndBindUBOs(pipeline);
+
+            if (this.indexBuffer != null)
+                Renderer.getDrawer().drawIndexed(this.vertexBuffer, this.indexBuffer, this.indexCount);
+            else
+                Renderer.getDrawer().draw(this.vertexBuffer, this.vertexCount);
+
+            VRenderSystem.applyMVP(RenderSystem.getModelViewMatrix(), RenderSystem.getProjectionMatrix());
+
+        }
+    }
+
+    public void draw() {
+        if (this.indexCount != 0) {
+            RenderSystem.assertOnRenderThread();
+
+            Renderer.getDrawer().drawIndexed(this.vertexBuffer, this.indexBuffer, this.indexCount);
         }
     }
 
@@ -107,30 +150,15 @@ public class VBO {
         renderer.uploadAndBindUBOs(pipeline);
     }
 
-    public void draw() {
-        if (this.indexCount != 0) {
-            Renderer renderer = Renderer.getInstance();
-            Pipeline pipeline = renderer.getBoundPipeline();
-            renderer.uploadAndBindUBOs(pipeline);
-
-            if (this.indexBuffer != null) {
-                Renderer.getDrawer().drawIndexed(this.vertexBuffer, this.indexBuffer, this.indexCount);
-            }
-            else {
-                Renderer.getDrawer().draw(this.vertexBuffer, this.vertexCount);
-            }
-        }
-    }
-
     public void close() {
         if (this.vertexCount <= 0)
             return;
 
-        this.vertexBuffer.scheduleFree();
+        this.vertexBuffer.freeBuffer();
         this.vertexBuffer = null;
 
         if (!this.autoIndexed) {
-            this.indexBuffer.scheduleFree();
+            this.indexBuffer.freeBuffer();
             this.indexBuffer = null;
         }
 

@@ -417,5 +417,9 @@ public class Vulkan {
     public static Device getDevice() {
         return DeviceManager.device;
     }
+
+    public static net.vulkanmod.vulkan.framebuffer.SwapChain getSwapChain() {
+        return Renderer.getInstance().getSwapChain();
+    }
 }
 

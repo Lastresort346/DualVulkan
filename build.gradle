@@ -1,43 +1,65 @@
 plugins {
-	id 'fabric-loom' version '1.12-SNAPSHOT'
+	id 'java-library'
 	id 'maven-publish'
+	id 'net.neoforged.moddev' version '2.0.141'
+	id 'idea'
 }
 
 version = project.mod_version
 group = project.maven_group
 
-base {
-	archivesName = project.archives_base_name
-}
-
-loom {
-	accessWidenerPath = file("src/main/resources/vulkanmod.accesswidener")
+repositories {
+	maven {
+		name = 'Fabric'
+		url = 'https://maven.fabricmc.net/'
+	}
+	maven {
+		name = 'NeoForged'
+		url = 'https://maven.neoforged.net/releases'
+	}
+	mavenCentral()
 }
 
 dependencies {
-	// To change the versions see the gradle.properties file
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	// NeoForge dependencies are handled by the neoForge configuration
+}
 
-	// Fabric API.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+base {
+	archivesName = project.mod_id
+}
 
-	ext.includeModule = { name ->
-		var module = fabricApi.module(name, project.fabric_version)
-		modImplementation(module)
-		include(module)
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(21)
+	withSourcesJar()
+}
+
+neoForge {
+	version = project.neo_version
+	accessTransformers.from("src/main/resources/META-INF/accesstransformer.cfg")
+
+
+	parchment {
+		mappingsVersion = project.parchment_mappings_version
+		minecraftVersion = project.parchment_minecraft_version
 	}
 
-	includeModule("fabric-api-base")
-	includeModule("fabric-resource-loader-v0")
-	includeModule("fabric-resource-loader-v1")
-	includeModule("fabric-rendering-v1")
-	includeModule("fabric-renderer-api-v1")
-	includeModule("fabric-rendering-fluids-v1")
-	includeModule("fabric-block-view-api-v2")
-	includeModule("fabric-lifecycle-events-v1")
-	includeModule("fabric-transitive-access-wideners-v1")
+	runs {
+		client {
+			client()
+			jvmArgument '--add-opens=java.base/java.lang=ALL-UNNAMED'
+		}
+		server {
+			server()
+			programArgument '--nogui'
+			jvmArgument '--add-opens=java.base/java.lang=ALL-UNNAMED'
+		}
+	}
+
+	mods {
+		"${project.mod_id}" {
+			sourceSet sourceSets.main
+		}
+	}
 }
 
 project.ext.lwjglVersion = "3.3.3"
@@ -48,29 +70,38 @@ project.ext.macosNatives = "natives-macos"
 project.ext.macosArmNatives = "natives-macos-arm64"
 
 dependencies {
-	include(implementation("org.lwjgl:lwjgl-vulkan:$lwjglVersion"))
+	implementation("org.lwjgl:lwjgl-vulkan:$lwjglVersion")
 
-	ext.includeNatives = { name ->
-		include(implementation("$name:$lwjglVersion"))
-		include(runtimeOnly("$name:$lwjglVersion:$winNatives"))
-		include(runtimeOnly("$name:$lwjglVersion:$linuxNatives"))
-		include(runtimeOnly("$name:$lwjglVersion:$macosNatives"))
-		include(runtimeOnly("$name:$lwjglVersion:$macosArmNatives"))
+	ext.addNatives = { name ->
+		implementation("$name:$lwjglVersion")
+		runtimeOnly("$name:$lwjglVersion:$winNatives")
+		runtimeOnly("$name:$lwjglVersion:$linuxNatives")
+		runtimeOnly("$name:$lwjglVersion:$macosNatives")
+		runtimeOnly("$name:$lwjglVersion:$macosArmNatives")
 	}
 
-	includeNatives("org.lwjgl:lwjgl-vma")
-	includeNatives("org.lwjgl:lwjgl-shaderc")
+	addNatives("org.lwjgl:lwjgl-vma")
+	addNatives("org.lwjgl:lwjgl-shaderc")
 
-	//MoltenVK
-	include(runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosNatives"))
-	include(runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosArmNatives"))
+	runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosNatives")
+	runtimeOnly("org.lwjgl:lwjgl-vulkan:$lwjglVersion:$macosArmNatives")
 }
 
 processResources {
-	inputs.property "version", project.version
+	var replaceProperties = [
+			mod_id            : project.mod_id,
+			mod_name          : project.mod_name,
+			mod_version       : project.mod_version,
+			mod_authors       : project.mod_authors,
+			mod_description   : project.mod_description,
+			mod_license       : project.mod_license,
+			neo_version_range : project.neo_version_range,
+			minecraft_range   : project.minecraft_range
+	]
 
-	filesMatching("fabric.mod.json") {
-		expand "version": project.version
+	inputs.properties replaceProperties
+	filesMatching("META-INF/neoforge.mods.toml") {
+		expand replaceProperties
 	}
 }
 
@@ -79,18 +110,13 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
-
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
 }
 
 jar {
 	from("LICENSE") {
-		rename { "${it}_${project.base.archivesName.get()}"}
+		rename { "${it}_${project.mod_id}"}
 	}
 }
 
@@ -98,7 +124,7 @@ jar {
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
-			artifactId = project.archives_base_name
+			artifactId = project.mod_id
 			from components.java
 		}
 	}

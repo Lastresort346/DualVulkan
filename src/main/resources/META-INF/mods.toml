@@ -1,0 +1,28 @@
+modLoader = "neoforge"
+loaderVersion = "[21.1.0,)"
+license = "LGPL"
+
+[[mods]]
+modId = "vulkanmod"
+version = "${version}"
+displayName = "VulkanMod"
+description = "Bring Vulkan to Minecraft!"
+authors = "Collateral"
+logoFile = "assets/vulkanmod/vlogo.png"
+
+[[dependencies.vulkanmod]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.0,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.vulkanmod]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.21.2)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[mixins]]
+config = "vulkanmod.mixins.json"

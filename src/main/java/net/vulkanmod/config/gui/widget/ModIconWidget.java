@@ -1,7 +1,6 @@
 package net.vulkanmod.config.gui.widget;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.resources.ResourceLocation;
@@ -28,11 +27,11 @@ public class ModIconWidget extends VAbstractWidget {
         int height = this.height;
         GuiRenderer.fill(this.x, this.y, this.x + width, this.y + height, backgroundColor);
 
-
         int size = this.height - 4;
         int iconX = this.x + 4;
         int iconY = this.y + (height - size) / 2;
-        GuiRenderer.guiGraphics.blit(RenderPipelines.GUI_TEXTURED, icon, iconX, iconY, 0f, 0f, size, size, size, size);
+        // 1.21.1 GuiGraphics.blit(ResourceLocation, int, int, float, float, int, int, int, int)
+        GuiRenderer.guiGraphics.blit(icon, iconX, iconY, 0f, 0f, size, size, size, size);
 
         size = this.height;
         GuiRenderer.drawString(Minecraft.getInstance().font, (Component) this.name, this.x + 6 + size, this.y + this.height / 2 - 4, 0xffffffff);

@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.beryl.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "vkmod.RendererMixin",
+    "shader.MinecraftM",
+    "shader.LevelRendererM",
+    "shader.GameRendererM"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

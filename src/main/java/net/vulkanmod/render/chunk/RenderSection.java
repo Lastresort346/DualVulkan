@@ -2,32 +2,33 @@ package net.vulkanmod.render.chunk;
 
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.vulkanmod.render.chunk.buffer.AreaBuffer;
 import net.vulkanmod.render.chunk.buffer.DrawBuffers;
-import net.vulkanmod.render.chunk.buffer.DrawParametersBuffer;
 import net.vulkanmod.render.chunk.build.RenderRegion;
 import net.vulkanmod.render.chunk.build.RenderRegionBuilder;
-import net.vulkanmod.render.chunk.build.task.TaskDispatcher;
+import net.vulkanmod.render.chunk.build.TaskDispatcher;
 import net.vulkanmod.render.chunk.build.task.BuildTask;
 import net.vulkanmod.render.chunk.build.task.ChunkTask;
 import net.vulkanmod.render.chunk.build.task.CompiledSection;
 import net.vulkanmod.render.chunk.build.task.SortTransparencyTask;
-import net.vulkanmod.render.chunk.cull.QuadFacing;
 import net.vulkanmod.render.chunk.graph.GraphDirections;
 import net.vulkanmod.render.chunk.util.Util;
 import net.vulkanmod.render.vertex.TerrainRenderType;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 
 public class RenderSection {
+    static final Map<RenderSection, Set<BlockEntity>> globalBlockEntitiesMap = new Reference2ReferenceOpenHashMap<>();
+
     private ChunkArea chunkArea;
     public byte frustumIndex;
     public short lastFrame = -1;
     private short lastFrame2 = -1;
-    public short inAreaIndex;
 
     public byte adjDirs;
     public RenderSection
@@ -46,6 +47,8 @@ public class RenderSection {
 
     public int xOffset, yOffset, zOffset;
 
+    private final DrawBuffers.DrawParameters[] drawParametersArray;
+
     // Graph-info
     public byte mainDir;
     public byte directions;
@@ -57,6 +60,11 @@ public class RenderSection {
         this.xOffset = x;
         this.yOffset = y;
         this.zOffset = z;
+
+        this.drawParametersArray = new DrawBuffers.DrawParameters[TerrainRenderType.VALUES.length];
+        for (int i = 0; i < this.drawParametersArray.length; ++i) {
+            this.drawParametersArray[i] = new DrawBuffers.DrawParameters();
+        }
     }
 
     public void setOrigin(int x, int y, int z) {
@@ -289,20 +297,8 @@ public class RenderSection {
         return zOffset;
     }
 
-    public void resetDrawParameters(TerrainRenderType renderType) {
-        for (int i = 0; i < QuadFacing.COUNT; ++i) {
-            DrawBuffers drawBuffers = this.chunkArea.getDrawBuffers();
-            long ptr = DrawParametersBuffer.getParamsPtr(drawBuffers.getDrawParamsPtr(), this.inAreaIndex, renderType.ordinal(), i);
-
-            AreaBuffer areaBuffer = drawBuffers.getAreaBuffer(renderType);
-            int vertexOffset = DrawParametersBuffer.getVertexOffset(ptr);
-            if (areaBuffer != null && vertexOffset != -1) {
-                int segmentOffset = vertexOffset * drawBuffers.vertexSize;
-                areaBuffer.setSegmentFree(segmentOffset);
-            }
-
-            DrawParametersBuffer.resetParameters(ptr);
-        }
+    public DrawBuffers.DrawParameters getDrawParameters(TerrainRenderType renderType) {
+        return drawParametersArray[renderType.ordinal()];
     }
 
     public void setChunkArea(ChunkArea chunkArea) {
@@ -343,10 +339,6 @@ public class RenderSection {
         return (byte) (this.visibility >> (Util.getOppositeDirIdx(this.mainDir) << 3));
     }
 
-    public long getVisibility() {
-        return visibility;
-    }
-
     public boolean isCompletelyEmpty() {
         return this.completelyEmpty;
     }
@@ -356,19 +348,26 @@ public class RenderSection {
     }
 
     public void updateGlobalBlockEntities(Collection<BlockEntity> fullSet) {
-        Set<BlockEntity> sectionSet = compileStatus.globalBlockEntities;
+        if (fullSet.isEmpty())
+            return;
+
+        Set<BlockEntity> set = Sets.newHashSet(fullSet);
+        Set<BlockEntity> set1;
+        Set<BlockEntity> sectionSet;
+        synchronized (globalBlockEntitiesMap) {
+            sectionSet = globalBlockEntitiesMap.computeIfAbsent(this,
+                    (section) -> new ObjectOpenHashSet<>());
+        }
 
         if (sectionSet.size() != fullSet.size() || !sectionSet.containsAll(fullSet)) {
-            Set<BlockEntity> toRemove = Sets.newHashSet(sectionSet);
-            Set<BlockEntity> toAdd = Sets.newHashSet(fullSet);
-            toAdd.removeAll(sectionSet);
-            toRemove.removeAll(fullSet);
+            set1 = Sets.newHashSet(sectionSet);
+            set.removeAll(sectionSet);
+            set1.removeAll(fullSet);
 
             sectionSet.clear();
             sectionSet.addAll(fullSet);
 
-            // TODO
-//            Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(toRemove, toAdd);
+            Minecraft.getInstance().levelRenderer.updateGlobalBlockEntities(set1, set);
         }
     }
 
@@ -386,12 +385,8 @@ public class RenderSection {
         if (this.chunkArea == null)
             return;
 
-        long basePtr = this.chunkArea.getDrawBuffers().getDrawParamsPtr();
-        for (TerrainRenderType renderType : TerrainRenderType.VALUES) {
-            for (QuadFacing facing : QuadFacing.VALUES) {
-                long ptr = DrawParametersBuffer.getParamsPtr(basePtr, this.inAreaIndex, renderType.ordinal(), facing.ordinal());
-                DrawParametersBuffer.resetParameters(ptr);
-            }
+        for (TerrainRenderType r : TerrainRenderType.VALUES) {
+            this.getDrawParameters(r).reset(this.chunkArea, r);
         }
     }
 
@@ -423,13 +418,8 @@ public class RenderSection {
         return this.lastFrame;
     }
 
-    public short getLastFrame2() {
-        return this.lastFrame2;
-    }
-
     static class CompileStatus {
         CompiledSection compiledSection = CompiledSection.UNCOMPILED;
-        Set<BlockEntity> globalBlockEntities = new ObjectOpenHashSet<>();
         BuildTask buildTask;
         SortTransparencyTask sortTask;
     }

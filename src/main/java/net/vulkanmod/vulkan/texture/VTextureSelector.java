@@ -55,6 +55,13 @@ public abstract class VTextureSelector {
 
     public static void uploadSubTexture(int mipLevel, int arrayLayer, int width, int height, int xOffset, int yOffset,
                                         int unpackSkipRows, int unpackSkipPixels, int unpackRowLength,
+                                        ByteBuffer buffer) {
+        uploadSubTexture(mipLevel, arrayLayer, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, unpackRowLength,
+                MemoryUtil.memAddress(buffer));
+    }
+
+    public static void uploadSubTexture(int mipLevel, int arrayLayer, int width, int height, int xOffset, int yOffset,
+                                        int unpackSkipRows, int unpackSkipPixels, int unpackRowLength,
                                         long bufferPtr) {
         VulkanImage texture = boundTextures[activeTexture];
 
@@ -85,16 +92,12 @@ public abstract class VTextureSelector {
         var imageDescriptors = pipeline.getImageDescriptors();
 
         for (ImageDescriptor state : imageDescriptors) {
-            var textureView = RenderSystem.getShaderTexture(state.imageIdx);
+            int textureId = RenderSystem.getShaderTexture(state.imageIdx);
 
-            if (textureView == null)
+            if (textureId <= 0)
                 continue;
 
-            VkGpuTexture gpuTexture = (VkGpuTexture) textureView.texture();
-            gpuTexture.flushModeChanges();
-
-            final int shaderTexture = gpuTexture.glId();
-            VkGlTexture texture = VkGlTexture.getTexture(shaderTexture);
+            VkGlTexture texture = VkGlTexture.getTexture(textureId);
 
             if (texture != null && texture.getVulkanImage() != null) {
                 VTextureSelector.bindTexture(state.imageIdx, texture.getVulkanImage());

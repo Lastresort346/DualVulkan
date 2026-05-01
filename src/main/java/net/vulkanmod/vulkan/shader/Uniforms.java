@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.shader;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import it.unimi.dsi.fastutil.objects.Object2ReferenceOpenHashMap;
+import net.vulkanmod.render.shadow.ShadowUniforms;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.shader.layout.Uniform;
 import net.vulkanmod.vulkan.util.MappedBuffer;
@@ -27,6 +28,13 @@ public class Uniforms {
         mat4f_uniformMap.put("MVP", VRenderSystem::getMVP);
         mat4f_uniformMap.put("TextureMat", VRenderSystem::getTextureMatrix);
 
+        // Shadow pass uniforms (populated by ShadowPass each frame)
+        mat4f_uniformMap.put("ShadowMVP", () -> {
+            MappedBuffer buf = new MappedBuffer(16 * 4);
+            ShadowUniforms.writeSunMVP(buf);
+            return buf;
+        });
+
         //Vec1i
         vec1i_uniformMap.put("EndPortalLayers", () -> 15);
 
@@ -41,6 +49,8 @@ public class Uniforms {
         vec1f_uniformMap.put("FogCloudsEnd", () -> VRenderSystem.getFogData().cloudEnd);
         vec1f_uniformMap.put("LineWidth", RenderSystem::getShaderLineWidth);
         vec1f_uniformMap.put("AlphaCutout", () -> VRenderSystem.alphaCutout);
+        vec1f_uniformMap.put("ShadowBias",     ShadowUniforms::getShadowBias);
+        vec1f_uniformMap.put("ShadowDarkness", ShadowUniforms::getShadowDarkness);
 
         //Vec2
         vec2f_uniformMap.put("ScreenSize", VRenderSystem::getScreenSize);

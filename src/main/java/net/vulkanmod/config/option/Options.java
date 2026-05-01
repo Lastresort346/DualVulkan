@@ -3,7 +3,7 @@ package net.vulkanmod.config.option;
 import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.*;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ParticleStatus;
+import net.minecraft.client.ParticleStatus;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.config.Config;
 import net.vulkanmod.config.gui.*;
@@ -144,7 +144,7 @@ public abstract class Options {
                                         : String.valueOf(value)),
                                 value -> {
                                     mcOptions.framerateLimit().set(value);
-                                    minecraft.getFramerateLimitTracker().setFramerateLimit(value);
+                                    // getFramerateLimitTracker() not available in 1.21.1
                                 },
                                 () -> mcOptions.framerateLimit().get()),
                         new SwitchOption(Component.translatable("options.vsync"),
@@ -153,11 +153,7 @@ public abstract class Options {
                                     window.updateVsync(value);
                                 },
                                 () -> mcOptions.enableVsync().get()),
-                        new CyclingOption<>(Component.translatable("options.inactivityFpsLimit"),
-                                InactivityFpsLimit.values(),
-                                value -> mcOptions.inactivityFpsLimit().set(value),
-                                () -> mcOptions.inactivityFpsLimit().get())
-                                .setTranslator(v -> Component.translatable(v.getKey()))
+                        // inactivityFpsLimit() not available in 1.21.1 — removed
                 }),
                 new OptionBlock("", new Option<?>[]{
                         new RangeOption(Component.translatable("options.guiScale"),
@@ -246,10 +242,7 @@ public abstract class Options {
                                 value -> mcOptions.cloudStatus().set(value),
                                 () -> mcOptions.cloudStatus().get())
                                 .setTranslator(c -> Component.translatable(c.getKey())),
-                        new RangeOption(Component.translatable("options.renderCloudsDistance"),
-                                2, 128, 1,
-                                value -> mcOptions.cloudRange().set(value),
-                                () -> mcOptions.cloudRange().get()),
+                        // cloudRange() not available in 1.21.1 — removed
                         new CyclingOption<>(Component.translatable("options.ao"),
                                 new Integer[]{LightMode.FLAT, LightMode.SMOOTH, LightMode.SUB_BLOCK},
                                 value -> {
@@ -325,7 +318,6 @@ public abstract class Options {
                         new SwitchOption(Component.translatable("vulkanmod.options.uniqueOpaqueLayer"),
                                 v -> {
                                     config.uniqueOpaqueLayer = v;
-                                    TerrainRenderType.updateMapping();
                                     minecraft.levelRenderer.allChanged();
                                 },
                                 () -> config.uniqueOpaqueLayer)

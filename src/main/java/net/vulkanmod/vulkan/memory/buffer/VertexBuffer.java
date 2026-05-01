@@ -16,4 +16,8 @@ public class VertexBuffer extends Buffer {
         this.createBuffer(size);
     }
 
+    public void copyToVertexBuffer(int vertexSize, int vertexCount, java.nio.ByteBuffer data) {
+        this.copyBuffer(data, data.remaining());
+    }
+
 }

@@ -21,12 +21,17 @@ import net.vulkanmod.vulkan.shader.layout.PushConstants;
 import net.vulkanmod.vulkan.shader.layout.Uniform;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
 import net.vulkanmod.vulkan.util.MappedBuffer;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.Validate;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
@@ -320,6 +325,31 @@ public abstract class Pipeline {
         public void compileShaders(String name, String vsh, String fsh) {
             this.vertShaderSPIRV = SPIRVUtils.compileShader(String.format("%s.vsh", name), vsh, ShaderKind.VERTEX_SHADER);
             this.fragShaderSPIRV = SPIRVUtils.compileShader(String.format("%s.fsh", name), fsh, ShaderKind.FRAGMENT_SHADER);
+        }
+
+        public void compileShaders() {
+            String vshPath = String.format("/assets/vulkanmod/shaders/%s.vsh", this.shaderPath);
+            String fshPath = String.format("/assets/vulkanmod/shaders/%s.fsh", this.shaderPath);
+
+            try {
+                String vsh = IOUtils.toString(Pipeline.class.getResourceAsStream(vshPath), StandardCharsets.UTF_8);
+                String fsh = IOUtils.toString(Pipeline.class.getResourceAsStream(fshPath), StandardCharsets.UTF_8);
+
+                compileShaders(this.shaderPath, vsh, fsh);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        public void parseBindingsJSON() {
+            String path = String.format("/assets/vulkanmod/shaders/%s.json", this.shaderPath);
+
+            try (InputStream inputStream = Pipeline.class.getResourceAsStream(path)) {
+                JsonObject jsonObject = GsonHelper.parse(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+                parseBindings(jsonObject);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         public void setVertShaderSPIRV(SPIRV vertShaderSPIRV) {

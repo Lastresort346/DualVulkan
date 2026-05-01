@@ -3,9 +3,6 @@ package net.vulkanmod.config;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.fabricmc.loader.api.Version;
-import net.fabricmc.loader.api.VersionParsingException;
-import net.fabricmc.loader.impl.util.version.VersionParser;
 import net.minecraft.SharedConstants;
 import net.vulkanmod.Initializer;
 
@@ -21,7 +18,7 @@ public abstract class UpdateChecker {
         CompletableFuture.supplyAsync(() -> {
             try {
                 String req = "https://api.modrinth.com/v2/project/vulkanmod/version?include_changelog=false";
-                String mcVersion = SharedConstants.getCurrentVersion().name();
+                String mcVersion = SharedConstants.getCurrentVersion().getName();
                 req += "&game_versions=%s".formatted(mcVersion);
 
                 URL url = new URL(req);
@@ -34,15 +31,14 @@ public abstract class UpdateChecker {
 
                 String version = String.valueOf(versions.get(0).getAsJsonObject().get("version_number")).replace("\"", "");
 
-                var currentVersion = VersionParser.parseSemantic(Initializer.getVersion());
-
-                if (currentVersion.getPrereleaseKey().isPresent()) {
+                var currentVersion = parseSemVer(Initializer.getVersion());
+                if (Initializer.getVersion().contains("-")) {
                     Initializer.LOGGER.info("Pre-release version, skipping update check.");
 
                     return null;
                 }
 
-                updateAvailable = currentVersion.compareTo(Version.parse(version)) < 0;
+                updateAvailable = compareSemVer(currentVersion, parseSemVer(version)) < 0;
 
                 if (updateAvailable) {
                     Initializer.LOGGER.info("Update available!");
@@ -51,12 +47,31 @@ public abstract class UpdateChecker {
             catch (IOException e) {
                 Initializer.LOGGER.info("Error occurred, skipping update check.");
             }
-            catch (VersionParsingException e) {
-                Initializer.LOGGER.info("Unable to parse version, skipping update check.");
-            }
-
             return null;
         });
+    }
+
+    private static int[] parseSemVer(String version) {
+        String normalized = version.split("-", 2)[0];
+        String[] split = normalized.split("\\.");
+        int[] parts = new int[]{0, 0, 0};
+        for (int i = 0; i < Math.min(split.length, 3); i++) {
+            try {
+                parts[i] = Integer.parseInt(split[i].replaceAll("[^0-9]", ""));
+            } catch (NumberFormatException ignored) {
+                parts[i] = 0;
+            }
+        }
+        return parts;
+    }
+
+    private static int compareSemVer(int[] current, int[] remote) {
+        for (int i = 0; i < 3; i++) {
+            if (current[i] != remote[i]) {
+                return Integer.compare(current[i], remote[i]);
+            }
+        }
+        return 0;
     }
 
     public static boolean isUpdateAvailable() {

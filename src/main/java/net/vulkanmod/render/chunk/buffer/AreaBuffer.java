@@ -3,10 +3,12 @@ package net.vulkanmod.render.chunk.buffer;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.render.chunk.util.Util;
-import net.vulkanmod.vulkan.memory.*;
+import net.vulkanmod.vulkan.memory.MemoryManager;
+import net.vulkanmod.vulkan.memory.MemoryType;
+import net.vulkanmod.vulkan.memory.MemoryTypes;
 import net.vulkanmod.vulkan.memory.buffer.Buffer;
-import net.vulkanmod.vulkan.memory.buffer.IndexBuffer;
 import net.vulkanmod.vulkan.memory.buffer.VertexBuffer;
+import net.vulkanmod.vulkan.memory.buffer.IndexBuffer;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
@@ -52,60 +54,13 @@ public class AreaBuffer {
         return buffer;
     }
 
-    public Segment allocateSegment(int size) {
-        if (DEBUG && size % elementSize != 0)
-            throw new RuntimeException("Unaligned buffer");
-
-        Segment segment = findSegment(size);
-
-        if (segment.size - size > 0) {
-            Segment s1 = new Segment(segment.offset + size, segment.size - size);
-            segments++;
-
-            if (segment.next != null) {
-                s1.bindNext(segment.next);
-            } else
-                this.last = s1;
-
-            segment.bindNext(s1);
-
-            segment.size = size;
-        }
-
-        segment.free = false;
-        this.usedSegments.put(segment.offset, segment);
-
-        segment.paramsPtr = 0;
-
-        this.used += size;
-
-        return segment;
-    }
-
-    public void freeSegment(int offset) {
-        if (offset != -1) {
+    public Segment upload(ByteBuffer byteBuffer, int oldOffset, DrawBuffers.DrawParameters drawParameters) {
+        // Free old segment
+        if (oldOffset != -1) {
             // Need to delay segment freeing since it might be still used by prev frames in flight
-//            this.setSegmentFree(oldOffset);
-            MemoryManager.getInstance().addToFreeSegment(this, offset);
+            this.setSegmentFree(oldOffset);
+//            MemoryManager.getInstance().addToFreeSegment(this, oldOffset);
         }
-    }
-
-    public void upload(Segment segment, ByteBuffer byteBuffer, int offset) {
-        int size = byteBuffer.remaining();
-
-        if (DEBUG && size % elementSize != 0)
-            throw new RuntimeException("Unaligned buffer");
-
-        if (size + offset > segment.size) {
-            throw new RuntimeException("trying to upload %d at offset %d, but segment size is %d".formatted(size, offset, segment.size));
-        }
-
-        Buffer dst = this.buffer;
-        UploadManager.INSTANCE.recordUpload(dst, segment.offset + offset, size, byteBuffer);
-    }
-
-    public Segment upload(ByteBuffer byteBuffer, int oldOffset, long paramsPtr) {
-        freeSegment(oldOffset);
 
         int size = byteBuffer.remaining();
 
@@ -131,7 +86,7 @@ public class AreaBuffer {
         segment.free = false;
         this.usedSegments.put(segment.offset, segment);
 
-        segment.paramsPtr = paramsPtr;
+        segment.drawParameters = drawParameters;
 
         Buffer dst = this.buffer;
         UploadManager.INSTANCE.recordUpload(dst, segment.offset, size, byteBuffer);
@@ -165,10 +120,9 @@ public class AreaBuffer {
         int oldSize = this.size;
 
         int minIncrement = this.size >> 3;
-        minIncrement = (int) Util.align(minIncrement, this.elementSize);
+        minIncrement = Util.align(minIncrement, this.elementSize);
 
-//        int increment = Math.max(minIncrement, uploadSize << 1);
-        int increment = Math.max(minIncrement, uploadSize);
+        int increment = Math.max(minIncrement, uploadSize << 1);
 
         if (increment < uploadSize)
             throw new RuntimeException(String.format("Size increment %d < %d (Upload size)", increment, uploadSize));
@@ -183,7 +137,7 @@ public class AreaBuffer {
         // TODO: moving only used segments causes corruption
 //        moveUsedSegments(dst);
 
-        this.buffer.scheduleFree();
+        this.buffer.freeBuffer();
         this.buffer = dst;
 
         if (last.isFree()) {
@@ -278,7 +232,7 @@ public class AreaBuffer {
         this.used -= segment.size;
 
         segment.free = true;
-        segment.paramsPtr = -1;
+        segment.drawParameters = null;
 
         Segment next = segment.next;
         if (next != null && next.isFree()) {
@@ -305,11 +259,13 @@ public class AreaBuffer {
     }
 
     private void updateDrawParams(Segment segment) {
+        DrawBuffers.DrawParameters params = segment.drawParameters;
+
         int elementOffset = segment.offset / elementSize;
         if (this.usage == Usage.VERTEX.usage) {
-            DrawParametersBuffer.setVertexOffset(segment.paramsPtr, elementOffset);
+            params.vertexOffset = elementOffset;
         } else {
-            DrawParametersBuffer.setFirstIndex(segment.paramsPtr, elementOffset);
+            params.firstIndex = elementOffset;
         }
     }
 
@@ -318,7 +274,7 @@ public class AreaBuffer {
     }
 
     public void freeBuffer() {
-        this.buffer.scheduleFree();
+        this.buffer.freeBuffer();
     }
 
     public int fragmentation() {
@@ -400,7 +356,7 @@ public class AreaBuffer {
     public static class Segment {
         int offset, size;
         boolean free = true;
-        long paramsPtr;
+        DrawBuffers.DrawParameters drawParameters;
 
         Segment next, prev;
 

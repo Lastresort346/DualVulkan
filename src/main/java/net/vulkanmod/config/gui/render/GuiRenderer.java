@@ -1,16 +1,13 @@
 package net.vulkanmod.config.gui.render;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
-import org.joml.Matrix3x2f;
 
 import java.util.List;
 
@@ -112,11 +109,22 @@ public abstract class GuiRenderer {
         return maxWidth;
     }
 
-    public static void submitPolygon(RenderPipeline renderPipeline, TextureSetup textureSetup, float[][] vertices, int color) {
-        guiGraphics.guiRenderState.submitGuiElement(
-                new PolygonRenderState(
-                        renderPipeline, textureSetup, new Matrix3x2f(), vertices, color, guiGraphics.scissorStack.peek()
-                )
-        );
+    /**
+     * Render a filled polygon by decomposing it into triangles drawn via GuiGraphics.fill().
+     * In 1.21.1, there is no guiRenderState/TextureSetup/GuiElementRenderState API.
+     */
+    public static void submitPolygon(float[][] vertices, int color) {
+        if (vertices.length < 3) return;
+        // Fan triangulate: draw as a series of filled quads if quad-shaped, otherwise fan from [0]
+        for (int i = 1; i + 1 < vertices.length; i++) {
+            float x0 = vertices[0][0], y0 = vertices[0][1];
+            float x1 = vertices[i][0], y1 = vertices[i][1];
+            float x2 = vertices[i + 1][0], y2 = vertices[i + 1][1];
+            int minX = (int) Math.min(x0, Math.min(x1, x2));
+            int minY = (int) Math.min(y0, Math.min(y1, y2));
+            int maxX = (int) Math.ceil(Math.max(x0, Math.max(x1, x2)));
+            int maxY = (int) Math.ceil(Math.max(y0, Math.max(y1, y2)));
+            guiGraphics.fill(minX, minY, maxX, maxY, color);
+        }
     }
 }

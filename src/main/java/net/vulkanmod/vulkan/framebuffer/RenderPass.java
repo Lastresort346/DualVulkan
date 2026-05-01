@@ -90,11 +90,12 @@ public class RenderPass {
                                .storeOp(depthAttachmentInfo.storeOp)
                                .stencilLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE)
                                .stencilStoreOp(VK_ATTACHMENT_STORE_OP_DONT_CARE)
-                               .initialLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                               .initialLayout(VK_IMAGE_LAYOUT_UNDEFINED)  // UNDEFINED = don't care about old content
                                .finalLayout(depthAttachmentInfo.finalLayout);
 
-                VkAttachmentReference depthAttachmentRef = attachmentRefs.get(1)
-                                                                         .attachment(1)
+                // Attachment index: 0 for depth-only pass, 1 when color attachment precedes it
+                VkAttachmentReference depthAttachmentRef = attachmentRefs.get(i)
+                                                                         .attachment(i)
                                                                          .layout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
                 subpass.pDepthStencilAttachment(depthAttachmentRef);
@@ -105,8 +106,19 @@ public class RenderPass {
                           .pAttachments(attachments)
                           .pSubpasses(subpass);
 
-            //Layout transition subpass depency
-            switch (colorAttachmentInfo.finalLayout) {
+            // Layout transition subpass dependency (depth-only passes have no color attachment)
+            if (colorAttachmentInfo == null) {
+                // Depth-only: add a dependency so the depth write is visible to subsequent fragment reads
+                VkSubpassDependency.Buffer subpassDependencies = VkSubpassDependency.calloc(1, stack);
+                subpassDependencies.get(0)
+                        .srcSubpass(0).dstSubpass(VK_SUBPASS_EXTERNAL)
+                        .srcStageMask(VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
+                        .dstStageMask(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+                        .srcAccessMask(VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+                        .dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
+                renderPassInfo.pDependencies(subpassDependencies);
+            }
+            switch (colorAttachmentInfo != null ? colorAttachmentInfo.finalLayout : -1) {
                 case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR -> {
                     VkSubpassDependency.Buffer subpassDependencies = VkSubpassDependency.calloc(1, stack);
                     subpassDependencies.get(0)
@@ -210,6 +222,21 @@ public class RenderPass {
         }
 
         Renderer.getInstance().setBoundRenderPass(null);
+
+        if ((this.passType == PassType.SHADOW || this.passType == PassType.VOLUMETRICS)
+                && framebuffer != null
+                && framebuffer.getColorAttachment() != null) {
+            Framebuffer mainFramebuffer = Renderer.getInstance().getMainPass().getMainFramebuffer();
+            if (mainFramebuffer != null
+                    && mainFramebuffer.getColorAttachment() != null
+                    && mainFramebuffer.getColorAttachment() != framebuffer.getColorAttachment()) {
+                Renderer.getInstance().scheduleOffloadedCopy(
+                        framebuffer.getColorAttachment().getId(),
+                        mainFramebuffer.getColorAttachment().getId(),
+                        Math.min(framebuffer.getWidth(), mainFramebuffer.getWidth()),
+                        Math.min(framebuffer.getHeight(), mainFramebuffer.getHeight()));
+            }
+        }
     }
 
     public void beginDynamicRendering(VkCommandBuffer commandBuffer, MemoryStack stack) {
@@ -364,6 +391,14 @@ public class RenderPass {
 
         public Builder setPassType(PassType passType) {
             this.passType = passType;
+            // Shadow and AO passes store depth and transition it to shader-readable
+            if (passType == PassType.SHADOW || passType == PassType.AO) {
+                if (depthAttachmentInfo != null) {
+                    depthAttachmentInfo
+                            .setOps(VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE)
+                            .setFinalLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                }
+            }
             return this;
         }
 

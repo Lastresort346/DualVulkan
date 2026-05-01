@@ -5,6 +5,7 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.vulkanmod.Initializer;
@@ -15,10 +16,10 @@ import net.vulkanmod.render.chunk.util.SimpleDirection;
 /**
  * The light data cache is used to make accessing the light data and occlusion properties of blocks cheaper. The data
  * for each block is stored as an integer with packed fields in order to work around the lack of value types in Java.
- * <p>
+ *
  * This code is not very pretty, but it does perform significantly faster than the vanilla implementation and has
  * good cache locality.
- * <p>
+ *
  * Each integer contains the following fields:
  * - BL: World block light, encoded as a 4-bit unsigned integer
  * - SL: World sky light, encoded as a 4-bit unsigned integer
@@ -28,7 +29,7 @@ import net.vulkanmod.render.chunk.util.SimpleDirection;
  * - OP: Block opacity test, true if opaque
  * - FO: Full cube opacity test, true if opaque full cube
  * - FC: Full cube test, true if full cube
- * <p>
+ *
  * You can use the various static pack/unpack methods to extract these values in a usable format.
  */
 public abstract class LightDataAccess {
@@ -44,7 +45,7 @@ public abstract class LightDataAccess {
     private static final float AO_INV = 1.0f / 2048.0f;
 
     private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-    protected BlockAndTintGetter region;
+    protected BlockAndTintGetter world;
 
     final boolean subBlockLighting;
 
@@ -54,14 +55,14 @@ public abstract class LightDataAccess {
 
     public int get(int x, int y, int z, SimpleDirection d1, SimpleDirection d2) {
         return this.get(x + d1.getStepX() + d2.getStepX(),
-                        y + d1.getStepY() + d2.getStepY(),
-                        z + d1.getStepZ() + d2.getStepZ());
+                y + d1.getStepY() + d2.getStepY(),
+                z + d1.getStepZ() + d2.getStepZ());
     }
 
     public int get(int x, int y, int z, SimpleDirection dir) {
         return this.get(x + dir.getStepX(),
-                        y + dir.getStepY(),
-                        z + dir.getStepZ());
+                y + dir.getStepY(),
+                z + dir.getStepZ());
     }
 
     public int get(BlockPos pos, SimpleDirection dir) {
@@ -80,18 +81,19 @@ public abstract class LightDataAccess {
 
     protected int compute(int x, int y, int z) {
         BlockPos pos = this.pos.set(x, y, z);
-        BlockState state = region.getBlockState(pos);
 
-        boolean em = state.emissiveRendering(region, pos);
+        BlockState state = world.getBlockState(pos);
+
+        boolean em = state.emissiveRendering(world, pos);
 
         boolean op;
-        if (this.subBlockLighting)
+        if(this.subBlockLighting)
             op = state.canOcclude();
         else
-            op = state.isViewBlocking(region, pos) && state.getLightBlock() != 0;
+            op = state.isViewBlocking(world, pos) && state.getLightBlock(world, pos) != 0;
 
-        boolean fo = state.isSolidRender();
-        boolean fc = state.isCollisionShapeFullBlock(region, pos);
+        boolean fo = state.isSolidRender(world, pos);
+        boolean fc = state.isCollisionShapeFullBlock(world, pos);
 
         int lu = state.getLightEmission();
 
@@ -101,25 +103,16 @@ public abstract class LightDataAccess {
         if (fo && lu == 0) {
             bl = 0;
             sl = 0;
-        }
-        else {
-            if (em) {
-                bl = region.getBrightness(LightLayer.BLOCK, pos);
-                sl = region.getBrightness(LightLayer.SKY, pos);
-            }
-            else {
-                int light = LevelRenderer.getLightColor(LevelRenderer.BrightnessGetter.DEFAULT, region, state, pos);
-                bl = LightTexture.block(light);
-                sl = LightTexture.sky(light);
-            }
+        } else {
+            bl = world.getBrightness(LightLayer.BLOCK, pos);
+            sl = world.getBrightness(LightLayer.SKY, pos);
         }
 
         // FIX: Do not apply AO from blocks that emit light
         float ao;
         if (lu == 0) {
-            ao = state.getShadeBrightness(region, pos);
-        }
-        else {
+            ao = state.getShadeBrightness(world, pos);
+        } else {
             ao = 1.0f;
         }
 
@@ -128,12 +121,12 @@ public abstract class LightDataAccess {
         bl = Math.max(bl, lu);
 
         int crs = (fo || fc) && lu == 0 && useAo ? 0xFF : 0;
-        if (!fo && op) {
-            VoxelShape shape = state.getShape(region, pos);
-            crs = ((VoxelShapeExtended) (shape)).getCornerOcclusion();
+        if(!fo && op) {
+            VoxelShape shape = state.getShape(world, pos);
+            crs = ((VoxelShapeExtended)(shape)).getCornerOcclusion();
         }
 
-        return packFC(fc) | packFO(fo) | packOP(op) | packEM(em) | packCO(crs) | packAO(ao) | packSL(sl) | packBL(bl);
+       return packFC(fc) | packFO(fo) | packOP(op) | packEM(em) | packCO(crs) | packAO(ao) | packSL(sl) | packBL(bl);
     }
 
     public static int packBL(int blockLight) {
@@ -222,7 +215,7 @@ public abstract class LightDataAccess {
         }
     }
 
-    public BlockAndTintGetter getRegion() {
-        return this.region;
+    public BlockAndTintGetter getWorld() {
+        return this.world;
     }
 }

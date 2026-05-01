@@ -1,6 +1,6 @@
 package net.vulkanmod.vulkan;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.platform.GlStateManager;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.client.Minecraft;
@@ -13,6 +13,7 @@ import net.vulkanmod.render.chunk.buffer.UploadManager;
 import net.vulkanmod.render.profiling.Profiler;
 import net.vulkanmod.render.texture.ImageUploadHelper;
 import net.vulkanmod.vulkan.device.DeviceManager;
+import net.vulkanmod.vulkan.device.MultiGpuInterop;
 import net.vulkanmod.vulkan.framebuffer.Framebuffer;
 import net.vulkanmod.vulkan.framebuffer.RenderPass;
 import net.vulkanmod.vulkan.framebuffer.SwapChain;
@@ -86,9 +87,13 @@ public class Renderer {
 
     private int framesNum;
     private List<VkCommandBuffer> mainCommandBuffers;
+    private List<VkCommandBuffer> secondaryCommandBuffers;
     private ArrayList<Long> imageAvailableSemaphores;
     private ArrayList<Long> renderFinishedSemaphores;
     private ArrayList<Long> inFlightFences;
+    private ArrayList<Long> offloadFinishedSemaphores;
+    private ArrayList<Long> offloadInFlightFences;
+    private boolean[] offloadFrameReady;
     private List<CommandPool.CommandBuffer> transferCbs;
 
     private Framebuffer boundFramebuffer;
@@ -98,7 +103,13 @@ public class Renderer {
     private static int imageIndex;
     private static int lastReset = -1;
     private VkCommandBuffer currentCmdBuffer;
+    private VkCommandBuffer currentSecondaryCmdBuffer;
     private boolean recordingCmds = false;
+    private boolean recordingSecondaryCmds = false;
+    private boolean inSecondaryPass = false;
+    public static boolean skipRendering = false;
+    private final OffloadCopyRequest[] pendingOffloadCopies = new OffloadCopyRequest[8];
+    private int pendingOffloadCopyCount = 0;
     int recursion = 0;
 
     MainPass mainPass;
@@ -139,8 +150,12 @@ public class Renderer {
         if (mainCommandBuffers != null) {
             mainCommandBuffers.forEach(commandBuffer -> vkFreeCommandBuffers(device, Vulkan.getCommandPool(), commandBuffer));
         }
+        if (secondaryCommandBuffers != null) {
+            secondaryCommandBuffers.forEach(commandBuffer -> vkFreeCommandBuffers(device, Vulkan.getCommandPool(), commandBuffer));
+        }
 
         mainCommandBuffers = new ArrayList<>(framesNum);
+        secondaryCommandBuffers = new ArrayList<>(framesNum);
 
         try (MemoryStack stack = stackPush()) {
             VkCommandBufferAllocateInfo allocInfo = VkCommandBufferAllocateInfo.calloc(stack);
@@ -158,6 +173,17 @@ public class Renderer {
 
             for (int i = 0; i < framesNum; i++) {
                 mainCommandBuffers.add(new VkCommandBuffer(pCommandBuffers.get(i), device));
+            }
+
+            allocInfo.commandBufferCount(framesNum);
+            PointerBuffer pSecondaryCommandBuffers = stack.mallocPointer(framesNum);
+            vkResult = vkAllocateCommandBuffers(device, allocInfo, pSecondaryCommandBuffers);
+            if (vkResult != VK_SUCCESS) {
+                throw new RuntimeException("Failed to allocate secondary command buffers: %s".formatted(VkResult.decode(vkResult)));
+            }
+
+            for (int i = 0; i < framesNum; i++) {
+                secondaryCommandBuffers.add(new VkCommandBuffer(pSecondaryCommandBuffers.get(i), device));
             }
         }
 
@@ -183,6 +209,9 @@ public class Renderer {
 
         imageAvailableSemaphores = new ArrayList<>(framesNum);
         inFlightFences = new ArrayList<>(framesNum);
+        offloadFinishedSemaphores = new ArrayList<>(framesNum);
+        offloadInFlightFences = new ArrayList<>(framesNum);
+        offloadFrameReady = new boolean[framesNum];
 
         try (MemoryStack stack = stackPush()) {
             VkSemaphoreCreateInfo semaphoreInfo = VkSemaphoreCreateInfo.calloc(stack);
@@ -194,18 +223,25 @@ public class Renderer {
 
             LongBuffer pImageAvailableSemaphore = stack.mallocLong(1);
             LongBuffer pRenderFinishedSemaphore = stack.mallocLong(1);
+            LongBuffer pOffloadFinishedSemaphore = stack.mallocLong(1);
             LongBuffer pFence = stack.mallocLong(1);
+            LongBuffer pOffloadFence = stack.mallocLong(1);
 
             for (int i = 0; i < framesNum; i++) {
 
                 if (vkCreateSemaphore(device, semaphoreInfo, null, pImageAvailableSemaphore) != VK_SUCCESS
-                    || vkCreateFence(device, fenceInfo, null, pFence) != VK_SUCCESS) {
+                    || vkCreateFence(device, fenceInfo, null, pFence) != VK_SUCCESS
+                    || vkCreateSemaphore(device, semaphoreInfo, null, pOffloadFinishedSemaphore) != VK_SUCCESS
+                    || vkCreateFence(device, fenceInfo, null, pOffloadFence) != VK_SUCCESS) {
 
                     throw new RuntimeException("Failed to create synchronization objects for the frame: " + i);
                 }
 
                 imageAvailableSemaphores.add(pImageAvailableSemaphore.get(0));
                 inFlightFences.add(pFence.get(0));
+                offloadFinishedSemaphores.add(pOffloadFinishedSemaphore.get(0));
+                offloadInFlightFences.add(pOffloadFence.get(0));
+                offloadFrameReady[i] = false;
             }
 
             for (int i = 0; i < swapChain.getImagesNum(); ++i) {
@@ -269,7 +305,9 @@ public class Renderer {
         resetDescriptors();
 
         currentCmdBuffer = mainCommandBuffers.get(currentFrame);
+        currentSecondaryCmdBuffer = secondaryCommandBuffers.get(currentFrame);
         vkResetCommandBuffer(currentCmdBuffer, 0);
+        vkResetCommandBuffer(currentSecondaryCmdBuffer, 0);
 
         try (MemoryStack stack = stackPush()) {
             // Check is swapchain has images before acquiring
@@ -314,8 +352,26 @@ public class Renderer {
 
         recordingCmds = true;
         mainPass.begin(commandBuffer, stack);
+        beginSecondaryRecordingIfNeeded();
 
         resetDynamicState(commandBuffer);
+    }
+
+    private void beginSecondaryRecordingIfNeeded() {
+        if (!DeviceManager.hasSecondaryDevice() || recordingSecondaryCmds) {
+            return;
+        }
+
+        try (MemoryStack stack = stackPush()) {
+            VkCommandBufferBeginInfo beginInfo = VkCommandBufferBeginInfo.calloc(stack);
+            beginInfo.sType(VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
+            beginInfo.flags(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+            int vkResult = vkBeginCommandBuffer(currentSecondaryCmdBuffer, beginInfo);
+            if (vkResult != VK_SUCCESS) {
+                throw new RuntimeException("Failed to begin secondary recording: %s".formatted(VkResult.decode(vkResult)));
+            }
+            recordingSecondaryCmds = true;
+        }
     }
 
     public void endFrame() {
@@ -335,8 +391,12 @@ public class Renderer {
         submitUploads();
         waitFences();
 
+        submitSecondaryFrame();
         submitFrame();
         recordingCmds = false;
+        recordingSecondaryCmds = false;
+        inSecondaryPass = false;
+        pendingOffloadCopyCount = 0;
         this.boundRenderPass = null;
         this.boundFramebuffer = null;
 
@@ -387,6 +447,10 @@ public class Renderer {
             submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
 
             Synchronization.INSTANCE.addWaitSemaphore(imageAvailableSemaphores.get(currentFrame));
+            int previousFrame = (currentFrame + framesNum - 1) % framesNum;
+            if (offloadFrameReady[previousFrame]) {
+                Synchronization.INSTANCE.addWaitSemaphore(offloadFinishedSemaphores.get(previousFrame));
+            }
             var waitSemaphores = Synchronization.INSTANCE.getWaitSemaphores(stack);
             int waitSemaphoreCount = waitSemaphores.limit();
             IntBuffer waitDstStageMask = stack.mallocInt(waitSemaphoreCount);
@@ -433,6 +497,49 @@ public class Renderer {
             }
 
             currentFrame = (currentFrame + 1) % framesNum;
+        }
+    }
+
+    private void submitSecondaryFrame() {
+        if (!recordingSecondaryCmds || !DeviceManager.hasSecondaryDevice()) {
+            return;
+        }
+
+        try (MemoryStack stack = stackPush()) {
+            int result = vkEndCommandBuffer(currentSecondaryCmdBuffer);
+            if (result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to finish secondary command buffer: %s".formatted(VkResult.decode(result)));
+            }
+
+            if (pendingOffloadCopyCount > 0) {
+                for (int i = 0; i < pendingOffloadCopyCount; i++) {
+                    OffloadCopyRequest copy = pendingOffloadCopies[i];
+                    MultiGpuInterop.recordShadowTargetCopy(
+                            stack,
+                            currentSecondaryCmdBuffer,
+                            copy.sourceImage,
+                            copy.destinationImage,
+                            copy.width,
+                            copy.height);
+                    pendingOffloadCopies[i] = null;
+                }
+            }
+
+            VkSubmitInfo submitInfo = VkSubmitInfo.calloc(stack);
+            submitInfo.sType(VK_STRUCTURE_TYPE_SUBMIT_INFO);
+            submitInfo.pCommandBuffers(stack.pointers(currentSecondaryCmdBuffer));
+            submitInfo.pSignalSemaphores(stack.longs(offloadFinishedSemaphores.get(currentFrame)));
+
+            vkResetFences(device, offloadInFlightFences.get(currentFrame));
+            int vkResult = vkQueueSubmit(
+                    DeviceManager.getComputeQueue().vkQueue(),
+                    submitInfo,
+                    offloadInFlightFences.get(currentFrame));
+            if (vkResult != VK_SUCCESS) {
+                throw new RuntimeException("Failed to submit secondary offload buffer: %s".formatted(VkResult.decode(vkResult)));
+            }
+
+            offloadFrameReady[currentFrame] = true;
         }
     }
 
@@ -521,11 +628,23 @@ public class Renderer {
             recordingCmds = true;
         }
 
+        VkCommandBuffer targetCommandBuffer = currentCmdBuffer;
+        boolean secondaryPass = renderPass.getPassType() == RenderPass.PassType.SHADOW
+                || renderPass.getPassType() == RenderPass.PassType.VOLUMETRICS
+                || renderPass.getPassType() == RenderPass.PassType.AO;
+        if (secondaryPass && DeviceManager.hasSecondaryDevice()) {
+            beginSecondaryRecordingIfNeeded();
+            targetCommandBuffer = currentSecondaryCmdBuffer;
+            inSecondaryPass = true;
+        } else {
+            inSecondaryPass = false;
+        }
+
         if (this.boundFramebuffer != framebuffer) {
-            this.endRenderPass(currentCmdBuffer);
+            this.endRenderPass(targetCommandBuffer);
 
             try (MemoryStack stack = stackPush()) {
-                framebuffer.beginRenderPass(currentCmdBuffer, renderPass, stack);
+                framebuffer.beginRenderPass(targetCommandBuffer, renderPass, stack);
             }
 
             this.boundFramebuffer = framebuffer;
@@ -633,6 +752,8 @@ public class Renderer {
         for (int i = 0; i < framesNum; ++i) {
             vkDestroyFence(device, inFlightFences.get(i), null);
             vkDestroySemaphore(device, imageAvailableSemaphores.get(i), null);
+            vkDestroyFence(device, offloadInFlightFences.get(i), null);
+            vkDestroySemaphore(device, offloadFinishedSemaphores.get(i), null);
         }
 
         for (int i = 0; i < swapChain.getImagesNum(); ++i) {
@@ -903,7 +1024,7 @@ public class Renderer {
     }
 
     public static VkCommandBuffer getCommandBuffer() {
-        return INSTANCE.currentCmdBuffer;
+        return INSTANCE.inSecondaryPass ? INSTANCE.currentSecondaryCmdBuffer : INSTANCE.currentCmdBuffer;
     }
 
     public static boolean isRecording() {
@@ -913,4 +1034,14 @@ public class Renderer {
     public static void scheduleSwapChainUpdate() {
         swapChainUpdate = true;
     }
+
+    public void scheduleOffloadedCopy(long sourceImage, long destinationImage, int width, int height) {
+        if (pendingOffloadCopyCount >= pendingOffloadCopies.length) {
+            return;
+        }
+
+        pendingOffloadCopies[pendingOffloadCopyCount++] = new OffloadCopyRequest(sourceImage, destinationImage, width, height);
+    }
+
+    private record OffloadCopyRequest(long sourceImage, long destinationImage, int width, int height) {}
 }

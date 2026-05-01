@@ -4,8 +4,6 @@ import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.navigation.FocusNavigationEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.vulkanmod.config.gui.render.GuiRenderer;
 import net.vulkanmod.config.gui.util.VGuiConstants;
@@ -17,7 +15,7 @@ import java.util.function.Consumer;
 
 public class VTextInputWidget extends VAbstractWidget {
     public boolean selected = false;
-    Consumer<VTextInputWidget> onSearch; // when the search is "activated", like pressing enter
+    Consumer<VTextInputWidget> onSearch;
     private String text;
     private final Component placeholder;
 
@@ -26,11 +24,10 @@ public class VTextInputWidget extends VAbstractWidget {
     private long lastBlinkTime = 0;
     private boolean showCursor = true;
 
-    private static final int CURSOR_BLINK_INTERVAL = 500; // ms
+    private static final int CURSOR_BLINK_INTERVAL = 500;
 
     public VTextInputWidget(int x, int y, int width, int height, Component placeholder, Consumer<VTextInputWidget> onSearch) {
         this.setPosition(x, y, width, height);
-
         this.placeholder = placeholder;
         this.onSearch = onSearch;
         this.text = "";
@@ -44,24 +41,20 @@ public class VTextInputWidget extends VAbstractWidget {
         boolean isFocused = this.focused || this.selected;
 
         int backgroundColor = ColorUtil.ARGB.multiplyAlpha(VGuiConstants.COLOR_BLACK, 0.45f);
-
         int textColor = hasText ? VGuiConstants.COLOR_WHITE : VGuiConstants.COLOR_GRAY;
 
         GuiRenderer.fill(this.x, this.y, this.x + this.width, this.y + this.height, backgroundColor);
-
         this.renderHovering(0, 0);
 
         if (isFocused && cursorPos != selectionEnd) {
             int start = Math.min(cursorPos, selectionEnd);
             int end = Math.max(cursorPos, selectionEnd);
             String before = text.substring(0, start);
-            String selected = text.substring(start, end);
-
+            String sel = text.substring(start, end);
             int xBefore = this.x + 8 + Minecraft.getInstance().font.width(before);
-            int xSelected = Minecraft.getInstance().font.width(selected);
-
+            int xSel = Minecraft.getInstance().font.width(sel);
             int selColor = ColorUtil.ARGB.multiplyAlpha(VGuiConstants.COLOR_RED, 0.55f);
-            GuiRenderer.fill(xBefore, this.y + 4, xBefore + xSelected, this.y + this.height - 4, selColor);
+            GuiRenderer.fill(xBefore, this.y + 4, xBefore + xSel, this.y + this.height - 4, selColor);
         }
 
         Component displayText = hasText ? Component.literal(this.text) : this.placeholder;
@@ -71,9 +64,7 @@ public class VTextInputWidget extends VAbstractWidget {
         if (isFocused && showCursor) {
             String beforeCursor = text.substring(0, cursorPos);
             int cursorX = this.x + 8 + Minecraft.getInstance().font.width(beforeCursor);
-
-            GuiRenderer.fill(cursorX, this.y + 6, cursorX + 1, this.y + this.height - 6,
-                    VGuiConstants.COLOR_WHITE);
+            GuiRenderer.fill(cursorX, this.y + 6, cursorX + 1, this.y + this.height - 6, VGuiConstants.COLOR_WHITE);
         }
 
         if (isFocused) {
@@ -93,22 +84,21 @@ public class VTextInputWidget extends VAbstractWidget {
     }
 
     @Override
-    public boolean keyPressed(KeyEvent keyEvent) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!this.focused && !this.selected) return false;
 
-        boolean shift = keyEvent.hasShiftDown();
-        boolean ctrl = keyEvent.hasControlDown();
+        boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean ctrl  = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
 
-        if (keyEvent.key() == GLFW.GLFW_KEY_ENTER || keyEvent.key() == GLFW.GLFW_KEY_KP_ENTER) {
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             this.onSearch.accept(this);
             return true;
         }
 
         if (cursorPos != selectionEnd) {
             int start = Math.min(cursorPos, selectionEnd);
-            int end = Math.max(cursorPos, selectionEnd);
-
-            if (keyEvent.key() == GLFW.GLFW_KEY_BACKSPACE || keyEvent.key() == GLFW.GLFW_KEY_DELETE) {
+            int end   = Math.max(cursorPos, selectionEnd);
+            if (keyCode == GLFW.GLFW_KEY_BACKSPACE || keyCode == GLFW.GLFW_KEY_DELETE) {
                 this.text = text.substring(0, start) + text.substring(end);
                 cursorPos = start;
                 selectionEnd = start;
@@ -117,7 +107,7 @@ public class VTextInputWidget extends VAbstractWidget {
             }
         }
 
-        if (keyEvent.key() == GLFW.GLFW_KEY_BACKSPACE) {
+        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
             if (cursorPos > 0) {
                 this.text = text.substring(0, cursorPos - 1) + text.substring(cursorPos);
                 cursorPos--;
@@ -127,7 +117,7 @@ public class VTextInputWidget extends VAbstractWidget {
             return true;
         }
 
-        if (keyEvent.key() == GLFW.GLFW_KEY_DELETE) {
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
             if (cursorPos < text.length()) {
                 this.text = text.substring(0, cursorPos) + text.substring(cursorPos + 1);
                 this.onSearch.accept(this);
@@ -135,30 +125,29 @@ public class VTextInputWidget extends VAbstractWidget {
             return true;
         }
 
-        if (ctrl && keyEvent.key() == GLFW.GLFW_KEY_A) {
+        if (ctrl && keyCode == GLFW.GLFW_KEY_A) {
             cursorPos = text.length();
             selectionEnd = 0;
             return true;
         }
 
-        if (keyEvent.key() == GLFW.GLFW_KEY_LEFT) {
+        if (keyCode == GLFW.GLFW_KEY_LEFT) {
             if (cursorPos > 0) cursorPos--;
             if (!shift) selectionEnd = cursorPos;
             return true;
         }
-        if (keyEvent.key() == GLFW.GLFW_KEY_RIGHT) {
+        if (keyCode == GLFW.GLFW_KEY_RIGHT) {
             if (cursorPos < text.length()) cursorPos++;
             if (!shift) selectionEnd = cursorPos;
             return true;
         }
 
-        String keyName = GLFW.glfwGetKeyName(keyEvent.key(), keyEvent.scancode());
+        String keyName = GLFW.glfwGetKeyName(keyCode, scanCode);
         if (keyName != null && keyName.length() == 1) {
-            char c = keyEvent.hasShiftDown() ? keyName.toUpperCase().charAt(0) : keyName.charAt(0);
-
+            char c = shift ? keyName.toUpperCase().charAt(0) : keyName.charAt(0);
             if (cursorPos != selectionEnd) {
                 int start = Math.min(cursorPos, selectionEnd);
-                int end = Math.max(cursorPos, selectionEnd);
+                int end   = Math.max(cursorPos, selectionEnd);
                 this.text = text.substring(0, start) + c + text.substring(end);
                 cursorPos = start + 1;
             } else {
@@ -173,49 +162,16 @@ public class VTextInputWidget extends VAbstractWidget {
         return false;
     }
 
-    public String getInput() {
-        return this.text;
-    }
-
-    public void setInput(String input) {
-        this.text = input != null ? input : "";
-    }
-
-    @SuppressWarnings("unused")
-    public void setSelected(boolean selected) {
-        this.selected = selected;
-    }
-
-    public boolean isVisible() {
-        return visible;
-    }
-
     @Override
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    @Override
-    public @Nullable ComponentPath nextFocusPath(FocusNavigationEvent event) {
-        if (!this.active || !this.visible)
-            return null;
-        return super.nextFocusPath(event);
-    }
-
-    @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean bl) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (!this.active || !this.visible) return false;
 
-        boolean clicked = this.clicked(event.x(), event.y());
+        boolean clicked = this.clicked(mouseX, mouseY);
         if (clicked) {
             this.setFocused(true);
             this.selected = true;
 
-            int relX = (int) event.x() - (this.x + 8);
+            int relX = (int) mouseX - (this.x + 8);
             int pos = 0;
             for (int i = 0; i < text.length(); i++) {
                 if (Minecraft.getInstance().font.width(text.substring(0, i + 1)) > relX) break;
@@ -223,7 +179,6 @@ public class VTextInputWidget extends VAbstractWidget {
             }
             cursorPos = pos;
             selectionEnd = pos;
-
             return true;
         } else {
             this.setFocused(false);
@@ -232,11 +187,25 @@ public class VTextInputWidget extends VAbstractWidget {
         }
     }
 
+    public String getInput() { return this.text; }
+    public void setInput(String input) { this.text = input != null ? input : ""; }
+    @SuppressWarnings("unused")
+    public void setSelected(boolean selected) { this.selected = selected; }
+    public boolean isVisible() { return visible; }
+
+    @Override
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+
+    @Override
+    public @Nullable ComponentPath nextFocusPath(FocusNavigationEvent event) {
+        if (!this.active || !this.visible) return null;
+        return super.nextFocusPath(event);
+    }
+
     @Override
     public void setFocused(boolean focused) {
         super.setFocused(focused);
-        if (!focused) {
-            this.selected = false;
-        }
+        if (!focused) this.selected = false;
     }
 }

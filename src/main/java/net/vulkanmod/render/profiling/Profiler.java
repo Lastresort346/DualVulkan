@@ -37,7 +37,6 @@ public class Profiler {
     ObjectArrayList<Node> nodeStack = new ObjectArrayList<>();
 
     ObjectArrayList<Node> nodes = new ObjectArrayList<>();
-    ObjectArrayList<Node> currentFrameNodes = new ObjectArrayList<>();
     Object2ReferenceOpenHashMap<String, Node> nodeMap = new Object2ReferenceOpenHashMap<>();
 
     Node mainNode;
@@ -68,7 +67,7 @@ public class Profiler {
         node.children.clear();
 
         if (node.parent == selectedNode)
-            currentFrameNodes.add(node);
+            nodes.add(node);
 
         currentNode = node;
 
@@ -119,10 +118,7 @@ public class Profiler {
 
         pushNodeStack(mainNode);
 
-        var t = nodes;
-        nodes = currentFrameNodes;
-        currentFrameNodes = t;
-        currentFrameNodes.clear();
+        nodes.clear();
     }
 
     public void end() {

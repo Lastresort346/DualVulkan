@@ -76,6 +76,10 @@ public class Buffer {
         usedBytes = 0;
     }
 
+    public void freeBuffer() {
+        MemoryManager.getInstance().addToFreeable(this);
+    }
+
     public long getAllocation() {
         return allocation;
     }

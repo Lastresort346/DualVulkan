@@ -27,9 +27,7 @@
     "compatibility.gl.GL30M",
 
     "debug.crash_report.SystemReportM",
-    "debug.DebugEntryMemoryM",
-    "debug.DebugEntrySystemSpecsM",
-    "debug.DebugScreenEntriesM",
+    "debug.DebugScreenOverlayM",
     "debug.KeyboardHandlerM",
 
     "fix.MainMixin",
@@ -44,18 +42,18 @@
     "profiling.TimerQueryM",
 
     "render.CompositeStateAccessor",
-    "render.CompositeRenderTypeM",
+    // "render.CompositeRenderTypeM",  -- disabled: draw(MeshData) doesn't exist in 1.21.1
     "render.FogRendererMixin",
     "render.GameRendererMixin",
-    "render.GuiRendererMixin",
+    // "render.GuiRendererMixin",  -- disabled 1.21.1: GuiRenderer/RenderPass/GpuTextureView not in 1.21.1
     "render.GlStateManagerM",
     "render.MinecraftMixin",
-    "render.PictureInPictureRendererM",
+    // "render.PictureInPictureRendererM",  -- disabled 1.21.1: PictureInPictureRenderer not in 1.21.1
     "render.RenderSystemMixin",
     "render.RenderTypeM",
     "render.biome.BiomeManagerM",
     "render.block.BakedQuadM",
-    "render.clouds.LevelRendererM",
+    // "render.clouds.LevelRendererM",  -- disabled 1.21.1: FrameGraphBuilder not in 1.21.1
     "render.color.BlockColorsM",
     "render.entity.EntityRendererM",
     "render.entity.LevelRendererM",
@@ -63,19 +61,12 @@
     "render.entity.model.ModelPartM",
     "render.frame.MinecraftMixin",
     "render.frame.RenderSystemMixin",
-    "render.frapi.BatchingRenderCommandQueueM",
-    "render.frapi.BlockModelRendererM",
-    "render.frapi.BlockRenderDispatcherAccessor",
-    "render.frapi.BlockRenderManagerM",
-    "render.frapi.ItemFeatureRendererM",
-    "render.frapi.ItemRendererAccessor",
-    "render.frapi.ItemRenderStateLayerRenderStateM",
-    "render.frapi.ItemRenderStateM",
-    "render.frapi.OrderedRenderCommandQueueImplM",
-    "render.particle.QuadParticleGroupM",
-    "render.particle.QuadParticleRenderStateM",
+    // FRAPI mixins disabled for 1.21.1: OrderedSubmitNodeCollector/ItemStackRenderState/BlockStateModel don't exist
+    // TODO: re-enable when porting FRAPI bridge to 1.21.1 API
+    // "render.particle.QuadParticleGroupM",  -- disabled 1.21.1: QuadParticleGroup not in 1.21.1
+    // "render.particle.QuadParticleRenderStateM",  -- disabled 1.21.1
     "render.shader.RenderPipelineM",
-    "render.shader.ShaderManagerM",
+    // "render.shader.ShaderManagerM",  -- disabled 1.21.1: ShaderManager/CompiledRenderPipeline not in 1.21.1
     "render.target.MainTargetMixin",
     "render.target.RenderTargetMixin",
     "render.vertex.BufferBuilderM",
@@ -91,7 +82,7 @@
     "texture.update.MTextureManager",
     "util.ScreenshotMixin",
 
-    "vertex.EntityOutlineGeneratorM",
+    // "vertex.EntityOutlineGeneratorM",  -- needs AT to make EntityOutlineGenerator public
     "vertex.SpriteCoordinateExpanderM",
     "vertex.VertexMultiConsumersM$DoubleM",
     "vertex.VertexMultiConsumersM$MultipleM",

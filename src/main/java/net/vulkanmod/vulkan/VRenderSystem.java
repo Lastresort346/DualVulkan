@@ -1,10 +1,10 @@
 package net.vulkanmod.vulkan;
 
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+// GpuBufferSlice removed — com.mojang.blaze3d.buffers doesn't exist in 1.21.1
 import com.mojang.blaze3d.platform.Window;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.fog.FogData;
+import net.vulkanmod.vulkan.fog.FogData;
 import net.vulkanmod.render.engine.VkGpuBuffer;
 import net.vulkanmod.vulkan.device.DeviceManager;
 import net.vulkanmod.vulkan.shader.PipelineState;
@@ -107,13 +107,7 @@ public abstract class VRenderSystem {
         mat.get(projectionMatrix.buffer.asFloatBuffer());
     }
 
-    public static void applyProjectionMatrix(GpuBufferSlice bufferSlice) {
-        long ptr = ((VkGpuBuffer) bufferSlice.buffer()).getBuffer().getDataPtr();
-        ByteBuffer byteBuffer = MemoryUtil.memByteBuffer(ptr + bufferSlice.offset(), bufferSlice.length());
-        Matrix4f matrix4f = new Matrix4f().set(byteBuffer);
-
-        matrix4f.get(projectionMatrix.buffer.asFloatBuffer());
-    }
+    // applyProjectionMatrix(GpuBufferSlice) removed — GpuBufferSlice doesn't exist in 1.21.1
 
     public static void calculateMVP() {
         org.joml.Matrix4f MV = new org.joml.Matrix4f(modelViewMatrix.buffer.asFloatBuffer());
@@ -250,8 +244,16 @@ public abstract class VRenderSystem {
         PipelineState.blendInfo.setBlendFunction(srcFactor, dstFactor);
     }
 
+    public static void blendFunc(com.mojang.blaze3d.platform.GlStateManager.SourceFactor srcFactor, com.mojang.blaze3d.platform.GlStateManager.DestFactor dstFactor) {
+        PipelineState.blendInfo.setBlendFunction(srcFactor.value, dstFactor.value);
+    }
+
     public static void blendFuncSeparate(int srcFactorRGB, int dstFactorRGB, int srcFactorAlpha, int dstFactorAlpha) {
         PipelineState.blendInfo.setBlendFuncSeparate(srcFactorRGB, dstFactorRGB, srcFactorAlpha, dstFactorAlpha);
+    }
+
+    public static void blendFuncSeparate(com.mojang.blaze3d.platform.GlStateManager.SourceFactor srcFactorRGB, com.mojang.blaze3d.platform.GlStateManager.DestFactor dstFactorRGB, com.mojang.blaze3d.platform.GlStateManager.SourceFactor srcFactorAlpha, com.mojang.blaze3d.platform.GlStateManager.DestFactor dstFactorAlpha) {
+        PipelineState.blendInfo.setBlendFuncSeparate(srcFactorRGB.value, dstFactorRGB.value, srcFactorAlpha.value, dstFactorAlpha.value);
     }
 
     public static void blendOp(int op) {
@@ -268,6 +270,10 @@ public abstract class VRenderSystem {
 
     public static void logicOp(int glLogicOp) {
         logicOpFun = glLogicOp;
+    }
+
+    public static void logicOp(com.mojang.blaze3d.platform.GlStateManager.LogicOp op) {
+        logicOpFun = op.ordinal() + 5376; // GL_CLEAR is 0x1500 (5376)
     }
 
     public static void polygonOffset(float slope, float biasConstant) {
